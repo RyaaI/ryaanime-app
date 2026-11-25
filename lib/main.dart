@@ -1,8 +1,6 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -118,18 +116,7 @@ class _HomeTabState extends State<HomeTab> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ElevatedButton.icon(
-              icon: const Icon(Icons.photo_library),
-              label: const Text('Pilih Foto / GIF Galeri'),
-              onPressed: () async {
-                final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
-                if (picked != null) {
-                  final p = await SharedPreferences.getInstance();
-                  await p.setString('avatar', picked.path);
-                  setState(() => avatarPath = picked.path);
-                }
-              },
-            ),
+            TextField(controller: TextEditingController(text: avatarPath), onChanged: (v) async { final p = await SharedPreferences.getInstance(); await p.setString('avatar', v.trim()); setState(() => avatarPath = v.trim()); }, decoration: const InputDecoration(labelText: 'Link Foto / GIF Profil (Opsional)')),
             TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Nama Pengguna')),
             TextField(controller: codeCtrl, decoration: const InputDecoration(labelText: 'Kode Owner (RYAA-TEMPEST)')),
           ],
@@ -173,7 +160,7 @@ class _HomeTabState extends State<HomeTab> {
                   child: CircleAvatar(
                     radius: 25,
                     backgroundColor: const Color(0xFF38BDF8),
-                    backgroundImage: avatarPath.isNotEmpty && File(avatarPath).existsSync() ? FileImage(File(avatarPath)) : null,
+                    backgroundImage: avatarPath.startsWith('http') ? NetworkImage(avatarPath) : null,
                     child: avatarPath.isEmpty ? const Icon(Icons.water_drop, color: Color(0xFF0B1120)) : null,
                   ),
                 ),

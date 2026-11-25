@@ -368,3 +368,9 @@ class _PlayerPageState extends State<PlayerPage> {
   void initState() {
     super.initState();
     ctrl = WebViewController()..setJavaScriptMode(JavaScriptMode.unrestricted)..loadRequest(Uri.parse(widget.url));
+  }
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(appBar: AppBar(title: Text(widget.title, style: const TextStyle(fontSize: 14)), backgroundColor: const Color(0xFF0F172A)), body: WebViewWidget(controller: ctrl));
+  }
+}

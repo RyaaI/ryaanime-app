@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -42,6 +43,26 @@ class RankHelper {
   }
 }
 
+class AniService {
+  static Future<List<Map<String, dynamic>>> queryMedia(String q, Map<String, dynamic> vars) async {
+    final res = await http.post(
+      Uri.https('graphql.anilist.co', '/'),
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: jsonEncode({'query': q, 'variables': vars}),
+    ).timeout(const Duration(seconds: 15));
+    final list = jsonDecode(res.body)['data']?['Page']?['media'] as List? ?? [];
+    return list.map<Map<String, dynamic>>((m) => {
+      'id': m['id'] ?? 0,
+      'title': m['title']?['romaji'] ?? m['title']?['english'] ?? 'Anime',
+      'score': m['averageScore'] != null ? (m['averageScore'] / 10).toStringAsFixed(1) : 'N/A',
+      'synopsis': (m['description'] ?? 'Tidak ada sinopsis.').toString().replaceAll(RegExp(r'<[^>]*>'), ''),
+      'episodes': m['episodes'] ?? (m['nextAiringEpisode']?['episode'] ?? 12),
+      'nextEp': m['nextAiringEpisode']?['episode'],
+      'img': m['coverImage']?['large'] ?? '',
+    }).toList();
+  }
+}
+
 class MainNav extends StatefulWidget {
   const MainNav({super.key});
   @override
@@ -52,10 +73,11 @@ class _MainNavState extends State<MainNav> {
   int idx = 0;
   @override
   Widget build(BuildContext context) {
-    final pages = [const HomeTab(), const ScheduleTab(), const SearchTab()];
+    final pages = [const HomeTab(), const ScheduleTab(), const HistoryTab(), const SearchTab()];
     return Scaffold(
       body: pages[idx],
       bottomNavigationBar: BottomNavigationBar(
+        type: BottomNavigationBarType.fixed,
         currentIndex: idx,
         backgroundColor: const Color(0xFF0F172A),
         selectedItemColor: const Color(0xFF38BDF8),
@@ -64,6 +86,7 @@ class _MainNavState extends State<MainNav> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.water_drop_rounded), label: 'Tempest'),
           BottomNavigationBarItem(icon: Icon(Icons.calendar_month_rounded), label: 'Jadwal'),
+          BottomNavigationBarItem(icon: Icon(Icons.history_rounded), label: 'Riwayat'),
           BottomNavigationBarItem(icon: Icon(Icons.search_rounded), label: 'Cari'),
         ],
       ),
@@ -78,51 +101,36 @@ class HomeTab extends StatefulWidget {
 
 class _HomeTabState extends State<HomeTab> {
   String name = 'Warga Tempest';
-  String avatarPath = '';
+  String avatarUrl = '';
   int exp = 0;
   bool isOwner = false;
-  late Future<List> futureAnime;
+  late Future<List<List<Map<String, dynamic>>>> futureData;
 
   @override
   void initState() {
     super.initState();
-    futureAnime = fetchTop();
+    futureData = loadAll();
     loadProfile();
   }
+
+  Future<List<List<Map<String, dynamic>>>> loadAll() => Future.wait([
+    AniService.queryMedia('query { Page(perPage: 15) { media(type: ANIME, status: RELEASING, sort: POPULARITY_DESC) { id title { romaji english } averageScore description episodes nextAiringEpisode { episode } coverImage { large } } } }', {}),
+    AniService.queryMedia('query { Page(perPage: 24) { media(type: ANIME, sort: TRENDING_DESC) { id title { romaji english } averageScore description episodes nextAiringEpisode { episode } coverImage { large } } } }', {}),
+  ]);
 
   Future<void> loadProfile() async {
     final p = await SharedPreferences.getInstance();
     setState(() {
       name = p.getString('name') ?? 'Warga Tempest';
-      avatarPath = p.getString('avatar') ?? '';
+      avatarUrl = p.getString('avatar') ?? '';
       exp = p.getInt('exp') ?? 0;
       isOwner = p.getBool('owner') ?? false;
     });
   }
 
-  Future<List> aniQuery(String q, Map<String, dynamic> vars) async {
-    final res = await http.post(
-      Uri.https('graphql.anilist.co', '/'),
-      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-      body: jsonEncode({'query': q, 'variables': vars}),
-    ).timeout(const Duration(seconds: 12));
-    final list = jsonDecode(res.body)['data']?['Page']?['media'] as List? ?? [];
-    return list.map((m) => {
-      'title': m['title']?['romaji'] ?? m['title']?['english'] ?? 'Anime',
-      'score': m['averageScore'] != null ? (m['averageScore'] / 10).toStringAsFixed(1) : 'N/A',
-      'synopsis': (m['description'] ?? 'Tidak ada sinopsis.').toString().replaceAll(RegExp(r'<[^>]*>'), ''),
-      'episodes': m['episodes'] ?? 12,
-      'images': {'jpg': {'image_url': m['coverImage']?['large'] ?? ''}},
-    }).toList();
-  }
-
-  Future<List> fetchTop() => aniQuery(
-    'query { Page(perPage: 24) { media(type: ANIME, sort: TRENDING_DESC) { title { romaji english } averageScore description episodes coverImage { large } } } }',
-    {},
-  );
-
   void openProfileDialog() {
     final nameCtrl = TextEditingController(text: name);
+    final imgCtrl = TextEditingController(text: avatarUrl);
     final codeCtrl = TextEditingController();
     showDialog(
       context: context,
@@ -132,7 +140,7 @@ class _HomeTabState extends State<HomeTab> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: TextEditingController(text: avatarPath), onChanged: (v) async { final p = await SharedPreferences.getInstance(); await p.setString('avatar', v.trim()); setState(() => avatarPath = v.trim()); }, decoration: const InputDecoration(labelText: 'Link Foto / GIF Profil (Opsional)')),
+            TextField(controller: imgCtrl, decoration: const InputDecoration(labelText: 'Link Foto / GIF Profil (Opsional)')),
             TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Nama Pengguna')),
             TextField(controller: codeCtrl, decoration: const InputDecoration(labelText: 'Kode Owner (RYAA-TEMPEST)')),
           ],
@@ -143,10 +151,12 @@ class _HomeTabState extends State<HomeTab> {
             onPressed: () async {
               final p = await SharedPreferences.getInstance();
               final newName = nameCtrl.text.trim().isEmpty ? name : nameCtrl.text.trim();
+              final newImg = imgCtrl.text.trim();
               final ownerActive = isOwner || codeCtrl.text.trim() == 'RYAA-TEMPEST';
               await p.setString('name', newName);
+              await p.setString('avatar', newImg);
               await p.setBool('owner', ownerActive);
-              setState(() { name = newName; isOwner = ownerActive; });
+              setState(() { name = newName; avatarUrl = newImg; isOwner = ownerActive; });
               if (ctx.mounted) Navigator.pop(ctx);
             },
             child: const Text('Simpan'),
@@ -155,6 +165,7 @@ class _HomeTabState extends State<HomeTab> {
       ),
     );
   }
+
   @override
   Widget build(BuildContext context) {
     final r = RankHelper.getRank(exp, isOwner);
@@ -176,8 +187,8 @@ class _HomeTabState extends State<HomeTab> {
                   child: CircleAvatar(
                     radius: 25,
                     backgroundColor: const Color(0xFF38BDF8),
-                    backgroundImage: avatarPath.startsWith('http') ? NetworkImage(avatarPath) : null,
-                    child: avatarPath.isEmpty ? const Icon(Icons.water_drop, color: Color(0xFF0B1120)) : null,
+                    backgroundImage: avatarUrl.startsWith('http') ? NetworkImage(avatarUrl) : null,
+                    child: !avatarUrl.startsWith('http') ? const Icon(Icons.water_drop, color: Color(0xFF0B1120)) : null,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -198,21 +209,46 @@ class _HomeTabState extends State<HomeTab> {
                     ),
                   ),
                 ),
-                IconButton(icon: const Icon(Icons.refresh, color: Color(0xFFFBBF24)), onPressed: () => setState(() { futureAnime = fetchTop(); })),
+                IconButton(icon: const Icon(Icons.refresh, color: Color(0xFFFBBF24)), onPressed: () => setState(() { futureData = loadAll(); })),
               ],
             ),
           ),
           Expanded(
-            child: FutureBuilder<List>(
-              future: futureAnime,
+            child: FutureBuilder<List<List<Map<String, dynamic>>>>(
+              future: futureData,
               builder: (c, s) {
                 if (s.hasError) return Center(child: Text('Error: ${s.error}', style: const TextStyle(color: Colors.redAccent)));
                 if (!s.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFF38BDF8)));
-                return GridView.builder(
+                final ongoing = s.data![0];
+                final trending = s.data![1];
+                return ListView(
                   padding: const EdgeInsets.symmetric(horizontal: 10),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 0.62, crossAxisSpacing: 8, mainAxisSpacing: 8),
-                  itemCount: s.data!.length,
-                  itemBuilder: (ctx, i) => AnimeCard(item: s.data![i], onWatch: loadProfile),
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 8),
+                      child: Text('Sedang Tayang (Ongoing)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF38BDF8))),
+                    ),
+                    SizedBox(
+                      height: 175,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: ongoing.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        itemBuilder: (ctx, i) => SizedBox(width: 105, child: AnimeCard(item: ongoing[i], badge: 'ONGOING', onWatch: loadProfile)),
+                      ),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 10),
+                      child: Text('Populer Musim Ini', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFFFBBF24))),
+                    ),
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 0.62, crossAxisSpacing: 8, mainAxisSpacing: 8),
+                      itemCount: trending.length,
+                      itemBuilder: (ctx, i) => AnimeCard(item: trending[i], onWatch: loadProfile),
+                    ),
+                  ],
                 );
               },
             ),
@@ -222,32 +258,179 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 }
-class ScheduleTab extends StatelessWidget {
+class ScheduleTab extends StatefulWidget {
   const ScheduleTab({super.key});
-  Future<List> fetchSched() async {
+  @override
+  State<ScheduleTab> createState() => _ScheduleTabState();
+}
+
+class _ScheduleTabState extends State<ScheduleTab> {
+  int selectedDay = DateTime.now().weekday % 7;
+  final days = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+  late Future<List<Map<String, dynamic>>> futureSched;
+
+  @override
+  void initState() {
+    super.initState();
+    futureSched = fetchWeek();
+  }
+
+  Future<List<Map<String, dynamic>>> fetchWeek() async {
+    final now = DateTime.now().toUtc();
+    final start = now.subtract(Duration(days: now.weekday % 7)).millisecondsSinceEpoch ~/ 1000;
+    final end = start + (7 * 86400);
     final res = await http.post(
       Uri.https('graphql.anilist.co', '/'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'query': 'query { Page(perPage: 24) { media(type: ANIME, status: RELEASING, sort: POPULARITY_DESC) { title { romaji english } averageScore description episodes coverImage { large } } } }'}),
+      body: jsonEncode({
+        'query': 'query (\$s: Int, \$e: Int) { Page(perPage: 50) { airingSchedules(airingAt_greater: \$s, airingAt_lesser: \$e, sort: TIME) { airingAt episode media { id title { romaji english } averageScore description episodes coverImage { large } isAdult } } } }',
+        'variables': {'s': start, 'e': end},
+      }),
     );
-    final list = jsonDecode(res.body)['data']?['Page']?['media'] as List? ?? [];
-    return list.map((m) => {'title': m['title']?['romaji'] ?? 'Anime', 'score': m['averageScore'] != null ? (m['averageScore'] / 10).toStringAsFixed(1) : 'N/A', 'synopsis': (m['description'] ?? '').toString().replaceAll(RegExp(r'<[^>]*>'), ''), 'episodes': m['episodes'] ?? 12, 'images': {'jpg': {'image_url': m['coverImage']?['large'] ?? ''}}}).toList();
+    final list = jsonDecode(res.body)['data']?['Page']?['airingSchedules'] as List? ?? [];
+    return list.where((x) => x['media']?['isAdult'] != true).map<Map<String, dynamic>>((x) {
+      final m = x['media'];
+      final dt = DateTime.fromMillisecondsSinceEpoch((x['airingAt'] as int) * 1000, isUtc: true).add(const Duration(hours: 7));
+      return {
+        'day': dt.weekday % 7,
+        'time': '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')} WIB',
+        'ep': x['episode'] ?? 1,
+        'id': m['id'] ?? 0,
+        'title': m['title']?['romaji'] ?? m['title']?['english'] ?? 'Anime',
+        'score': m['averageScore'] != null ? (m['averageScore'] / 10).toStringAsFixed(1) : 'N/A',
+        'synopsis': (m['description'] ?? 'Tidak ada sinopsis.').toString().replaceAll(RegExp(r'<[^>]*>'), ''),
+        'episodes': m['episodes'] ?? (x['episode'] ?? 12),
+        'img': m['coverImage']?['large'] ?? '',
+      };
+    }).toList();
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Jadwal Rilis • RyaaNime'), backgroundColor: const Color(0xFF0F172A)),
-      body: FutureBuilder<List>(
-        future: fetchSched(),
-        builder: (c, s) {
-          if (!s.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFF38BDF8)));
-          return GridView.builder(
-            padding: const EdgeInsets.all(10),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 0.62, crossAxisSpacing: 8, mainAxisSpacing: 8),
-            itemCount: s.data!.length,
-            itemBuilder: (ctx, i) => AnimeCard(item: s.data![i]),
-          );
-        },
+      body: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+            color: const Color(0xFF0F172A),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: List.generate(7, (i) {
+                final active = selectedDay == i;
+                return GestureDetector(
+                  onTap: () => setState(() => selectedDay = i),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+                    decoration: BoxDecoration(color: active ? const Color(0xFF38BDF8) : const Color(0xFF1E293B), borderRadius: BorderRadius.circular(10)),
+                    child: Text(days[i], style: TextStyle(fontWeight: FontWeight.bold, color: active ? const Color(0xFF0B1120) : Colors.white70)),
+                  ),
+                );
+              }),
+            ),
+          ),
+          Expanded(
+            child: FutureBuilder<List<Map<String, dynamic>>>(
+              future: futureSched,
+              builder: (c, s) {
+                if (!s.hasData) return const Center(child: CircularProgressIndicator(color: Color(0xFF38BDF8)));
+                final items = s.data!.where((e) => e['day'] == selectedDay).toList();
+                if (items.isEmpty) return const Center(child: Text('Tidak ada jadwal di hari ini.', style: TextStyle(color: Colors.white60)));
+                return ListView.separated(
+                  padding: const EdgeInsets.all(10),
+                  itemCount: items.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (ctx, i) {
+                    final it = items[i];
+                    return ListTile(
+                      tileColor: const Color(0xFF0F172A),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: const BorderSide(color: Color(0xFF1E3A5F))),
+                      leading: ClipRRect(borderRadius: BorderRadius.circular(6), child: Image.network(it['img'], width: 45, height: 65, fit: BoxFit.cover)),
+                      title: Text(it['title'], maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      subtitle: Text('Episode ${it['ep']} • ${it['time']}', style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 12)),
+                      trailing: const Icon(Icons.play_circle_fill, color: Color(0xFFFBBF24)),
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailPage(item: it))),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+class HistoryTab extends StatefulWidget {
+  const HistoryTab({super.key});
+  @override
+  State<HistoryTab> createState() => _HistoryTabState();
+}
+
+class _HistoryTabState extends State<HistoryTab> {
+  bool showFav = false;
+  List<Map<String, dynamic>> list = [];
+
+  @override
+  void initState() {
+    super.initState();
+    load();
+  }
+
+  Future<void> load() async {
+    final p = await SharedPreferences.getInstance();
+    final raw = p.getStringList(showFav ? 'favs' : 'history') ?? [];
+    setState(() => list = raw.map((e) => Map<String, dynamic>.from(jsonDecode(e))).toList());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: !showFav ? const Color(0xFF38BDF8) : const Color(0xFF0F172A)),
+                    onPressed: () { showFav = false; load(); },
+                    child: Text('Riwayat', style: TextStyle(color: !showFav ? const Color(0xFF0B1120) : Colors.white)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: showFav ? const Color(0xFFFBBF24) : const Color(0xFF0F172A)),
+                    onPressed: () { showFav = true; load(); },
+                    child: Text('Favorit', style: TextStyle(color: showFav ? const Color(0xFF0B1120) : Colors.white)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: list.isEmpty
+                ? Center(child: Text(showFav ? 'Belum ada anime favorit.' : 'Belum ada riwayat tontonan.', style: const TextStyle(color: Colors.white60)))
+                : ListView.separated(
+                    padding: const EdgeInsets.all(10),
+                    itemCount: list.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (ctx, i) {
+                      final it = list[i];
+                      return ListTile(
+                        tileColor: const Color(0xFF0F172A),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        leading: ClipRRect(borderRadius: BorderRadius.circular(6), child: Image.network(it['img'] ?? '', width: 45, height: 65, fit: BoxFit.cover)),
+                        title: Text(it['title'] ?? 'Anime', maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: Text(it['lastEp'] != null ? 'Terakhir: Episode ${it['lastEp']}' : '★ ${it['score'] ?? 'N/A'}', style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 12)),
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailPage(item: it))).then((_) => load()),
+                      );
+                    },
+                  ),
+          ),
+        ],
       ),
     );
   }
@@ -260,19 +443,19 @@ class SearchTab extends StatefulWidget {
 }
 
 class _SearchTabState extends State<SearchTab> {
-  List results = [];
+  List<Map<String, dynamic>> results = [];
   bool loading = false;
-  void search(String q) async {
-    if (q.trim().isEmpty) return;
+  final genres = ['Action', 'Fantasy', 'Adventure', 'Romance', 'Comedy', 'Magic', 'Supernatural', 'Sci-Fi'];
+
+  void search({String? q, String? genre}) async {
     setState(() => loading = true);
-    final res = await http.post(
-      Uri.https('graphql.anilist.co', '/'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'query': 'query (\$s: String) { Page(perPage: 21) { media(type: ANIME, search: \$s) { title { romaji english } averageScore description episodes coverImage { large } } } }', 'variables': {'s': q}}),
+    final data = await AniService.queryMedia(
+      'query (\$s: String, \$g: String) { Page(perPage: 24) { media(type: ANIME, search: \$s, genre: \$g, sort: POPULARITY_DESC) { id title { romaji english } averageScore description episodes nextAiringEpisode { episode } coverImage { large } } } }',
+      {if (q != null && q.trim().isNotEmpty) 's': q.trim(), if (genre != null) 'g': genre},
     );
-    final list = jsonDecode(res.body)['data']?['Page']?['media'] as List? ?? [];
-    setState(() { results = list.map((m) => {'title': m['title']?['romaji'] ?? 'Anime', 'score': m['averageScore'] != null ? (m['averageScore'] / 10).toStringAsFixed(1) : 'N/A', 'synopsis': (m['description'] ?? '').toString().replaceAll(RegExp(r'<[^>]*>'), ''), 'episodes': m['episodes'] ?? 12, 'images': {'jpg': {'image_url': m['coverImage']?['large'] ?? ''}}}).toList(); loading = false; });
+    setState(() { results = data; loading = false; });
   }
+
   @override
   Widget build(BuildContext context) {
     return SafeArea(
@@ -281,7 +464,7 @@ class _SearchTabState extends State<SearchTab> {
           Padding(
             padding: const EdgeInsets.all(12),
             child: TextField(
-              onSubmitted: search,
+              onSubmitted: (v) => search(q: v),
               decoration: InputDecoration(
                 hintText: 'Great Sage: Cari Anime...',
                 filled: true,
@@ -292,6 +475,22 @@ class _SearchTabState extends State<SearchTab> {
               ),
             ),
           ),
+          SizedBox(
+            height: 36,
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              scrollDirection: Axis.horizontal,
+              itemCount: genres.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 6),
+              itemBuilder: (ctx, i) => ActionChip(
+                backgroundColor: const Color(0xFF0F172A),
+                side: const BorderSide(color: Color(0xFF38BDF8)),
+                label: Text(genres[i], style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 12)),
+                onPressed: () => search(genre: genres[i]),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
           Expanded(
             child: loading ? const Center(child: CircularProgressIndicator(color: Color(0xFF38BDF8))) : GridView.builder(
               padding: const EdgeInsets.all(10),
@@ -305,16 +504,16 @@ class _SearchTabState extends State<SearchTab> {
     );
   }
 }
-
 class AnimeCard extends StatelessWidget {
-  final Map item;
+  final Map<String, dynamic> item;
+  final String? badge;
   final VoidCallback? onWatch;
-  const AnimeCard({super.key, required this.item, this.onWatch});
+  const AnimeCard({super.key, required this.item, this.badge, this.onWatch});
   @override
   Widget build(BuildContext context) {
-    final img = item['images']?['jpg']?['image_url'] ?? '';
+    final img = item['img'] ?? '';
     final title = item['title'] ?? 'Anime';
-    final score = item['score']?.toString() ?? 'N/A';
+    final score = item['score'] ?? 'N/A';
     return GestureDetector(
       onTap: () async {
         await Navigator.push(context, MaterialPageRoute(builder: (_) => DetailPage(item: item)));
@@ -330,6 +529,7 @@ class AnimeCard extends StatelessWidget {
                 children: [
                   ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.network(img, width: double.infinity, height: double.infinity, fit: BoxFit.cover)),
                   Positioned(top: 4, left: 4, child: Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2), decoration: BoxDecoration(color: const Color(0xCC0B1120), borderRadius: BorderRadius.circular(4)), child: Text('★ $score', style: const TextStyle(color: Color(0xFFFBBF24), fontSize: 10, fontWeight: FontWeight.bold)))),
+                  if (badge != null) Positioned(bottom: 4, right: 4, child: Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2), decoration: BoxDecoration(color: const Color(0xDD0284C7), borderRadius: BorderRadius.circular(4)), child: Text(badge!, style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)))),
                 ],
               ),
             ),
@@ -341,36 +541,77 @@ class AnimeCard extends StatelessWidget {
     );
   }
 }
-class DetailPage extends StatelessWidget {
-  final Map item;
+
+class DetailPage extends StatefulWidget {
+  final Map<String, dynamic> item;
   const DetailPage({super.key, required this.item});
   @override
+  State<DetailPage> createState() => _DetailPageState();
+}
+
+class _DetailPageState extends State<DetailPage> {
+  bool isFav = false;
+  @override
+  void initState() {
+    super.initState();
+    checkFav();
+  }
+
+  Future<void> checkFav() async {
+    final p = await SharedPreferences.getInstance();
+    final favs = p.getStringList('favs') ?? [];
+    setState(() => isFav = favs.any((e) => jsonDecode(e)['title'] == widget.item['title']));
+  }
+
+  Future<void> toggleFav() async {
+    final p = await SharedPreferences.getInstance();
+    final favs = p.getStringList('favs') ?? [];
+    favs.removeWhere((e) => jsonDecode(e)['title'] == widget.item['title']);
+    if (!isFav) favs.insert(0, jsonEncode(widget.item));
+    await p.setStringList('favs', favs);
+    setState(() => isFav = !isFav);
+  }
+
+  Future<void> openEp(int epNum) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setInt('exp', (p.getInt('exp') ?? 0) + 25);
+    final hist = p.getStringList('history') ?? [];
+    hist.removeWhere((e) => jsonDecode(e)['title'] == widget.item['title']);
+    final entry = Map<String, dynamic>.from(widget.item)..['lastEp'] = epNum;
+    hist.insert(0, jsonEncode(entry));
+    await p.setStringList('history', hist.take(40).toList());
+    if (!mounted) return;
+    Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerPage(item: widget.item, ep: epNum)));
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final title = item['title'] ?? 'Anime';
-    final syn = item['synopsis'] ?? 'Tidak ada sinopsis.';
-    final eps = item['episodes'] ?? 12;
+    final title = widget.item['title'] ?? 'Anime';
+    final syn = widget.item['synopsis'] ?? 'Tidak ada sinopsis.';
+    final int eps = (widget.item['episodes'] is int && widget.item['episodes'] > 0) ? widget.item['episodes'] : 12;
     return Scaffold(
       appBar: AppBar(title: Text(title, style: const TextStyle(fontSize: 15)), backgroundColor: const Color(0xFF0F172A)),
       body: ListView(
         padding: const EdgeInsets.all(14),
         children: [
-          Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF38BDF8))),
-          const SizedBox(height: 8),
-          Text(syn, maxLines: 6, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+          Row(
+            children: [
+              Expanded(child: ElevatedButton.icon(style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8)), icon: const Icon(Icons.play_arrow, color: Color(0xFF0B1120)), label: const Text('Mulai Tonton Ep 1', style: TextStyle(color: Color(0xFF0B1120), fontWeight: FontWeight.bold)), onPressed: () => openEp(1))),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(style: OutlinedButton.styleFrom(side: BorderSide(color: isFav ? const Color(0xFFFBBF24) : const Color(0xFF38BDF8))), icon: Icon(isFav ? Icons.bookmark : Icons.bookmark_border, color: isFav ? const Color(0xFFFBBF24) : const Color(0xFF38BDF8)), label: Text(isFav ? 'Favorit' : 'Subscribe', style: TextStyle(color: isFav ? const Color(0xFFFBBF24) : const Color(0xFF38BDF8))), onPressed: toggleFav),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(syn, maxLines: 5, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 13)),
           const SizedBox(height: 16),
-          const Text('Pilih Episode (+25 EXP):', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFFFBBF24))),
+          const Text('Pilih Episode (+25 EXP):', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFFFBBF24))),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: List.generate(eps > 50 ? 50 : eps, (i) => ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A), side: const BorderSide(color: Color(0xFF38BDF8))),
-              onPressed: () async {
-                final p = await SharedPreferences.getInstance();
-                await p.setInt('exp', (p.getInt('exp') ?? 0) + 25);
-                final uri = Uri.https('://youtube.com', '/results', {'search_query': '$title episode ${i + 1} sub indo'});
-                if (context.mounted) Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerPage(title: '$title - Ep ${i + 1}', url: uri.toString())));
-              },
+              onPressed: () => openEp(i + 1),
               child: Text('Ep ${i + 1}', style: const TextStyle(color: Color(0xFF38BDF8))),
             )),
           ),
@@ -379,24 +620,134 @@ class DetailPage extends StatelessWidget {
     );
   }
 }
-
 class PlayerPage extends StatefulWidget {
-  final String title;
-  final String url;
-  const PlayerPage({super.key, required this.title, required this.url});
+  final Map<String, dynamic> item;
+  final int ep;
+  const PlayerPage({super.key, required this.item, required this.ep});
   @override
   State<PlayerPage> createState() => _PlayerPageState();
 }
 
 class _PlayerPageState extends State<PlayerPage> {
   late final WebViewController ctrl;
+  String quality = '720p';
+  bool fullscreen = false;
+  final commentCtrl = TextEditingController();
+  List<Map<String, dynamic>> comments = [];
+
   @override
   void initState() {
     super.initState();
-    ctrl = WebViewController()..setJavaScriptMode(JavaScriptMode.unrestricted)..loadRequest(Uri.parse(widget.url));
+    final q = Uri.encodeComponent('${widget.item['title']} episode ${widget.ep} sub indo');
+    ctrl = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..loadRequest(Uri.parse('https://youtube.com'));
+    loadComments();
   }
+
+  Future<void> loadComments() async {
+    final p = await SharedPreferences.getInstance();
+    final key = 'cmt_${widget.item['title']}_${widget.ep}';
+    final raw = p.getStringList(key) ?? [];
+    setState(() => comments = raw.map((e) => Map<String, dynamic>.from(jsonDecode(e))).toList());
+  }
+
+  Future<void> postComment() async {
+    final txt = commentCtrl.text.trim();
+    if (txt.isEmpty) return;
+    final p = await SharedPreferences.getInstance();
+    final r = RankHelper.getRank(p.getInt('exp') ?? 0, p.getBool('owner') ?? false);
+    final entry = {
+      'user': p.getString('name') ?? 'Warga Tempest',
+      'avatar': p.getString('avatar') ?? '',
+      'rank': 'Lvl. ${r['lvl']} • ${r['title']}',
+      'owner': p.getBool('owner') ?? false,
+      'text': txt,
+    };
+    final key = 'cmt_${widget.item['title']}_${widget.ep}';
+    final raw = p.getStringList(key) ?? [];
+    raw.insert(0, jsonEncode(entry));
+    await p.setStringList(key, raw);
+    commentCtrl.clear();
+    loadComments();
+  }
+
+  @override
+  void dispose() {
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(appBar: AppBar(title: Text(widget.title, style: const TextStyle(fontSize: 14)), backgroundColor: const Color(0xFF0F172A)), body: WebViewWidget(controller: ctrl));
+    final title = '${widget.item['title']} • Ep ${widget.ep}';
+    return Scaffold(
+      appBar: fullscreen ? null : AppBar(title: Text(title, style: const TextStyle(fontSize: 14)), backgroundColor: const Color(0xFF0F172A)),
+      body: Column(
+        children: [
+          SizedBox(height: fullscreen ? MediaQuery.of(context).size.height : 230, child: WebViewWidget(controller: ctrl)),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            color: const Color(0xFF0F172A),
+            child: Row(
+              children: [
+                const Text('Kualitas: ', style: TextStyle(fontSize: 12, color: Colors.white70)),
+                DropdownButton<String>(
+                  value: quality,
+                  dropdownColor: const Color(0xFF0F172A),
+                  underline: const SizedBox(),
+                  style: const TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 12),
+                  items: ['360p', '480p', '720p', '1080p'].map((q) => DropdownMenuItem(value: q, child: Text(q))).toList(),
+                  onChanged: (v) { if (v != null) setState(() => quality = v); },
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: Icon(fullscreen ? Icons.fullscreen_exit : Icons.fullscreen, color: const Color(0xFFFBBF24)),
+                  onPressed: () {
+                    setState(() => fullscreen = !fullscreen);
+                    SystemChrome.setPreferredOrientations(fullscreen ? [DeviceOrientation.landscapeLeft] : [DeviceOrientation.portraitUp]);
+                  },
+                ),
+              ],
+            ),
+          ),
+          if (!fullscreen)
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.all(10),
+                children: [
+                  const Text('Komentar Warga Tempest', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF38BDF8))),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(child: TextField(controller: commentCtrl, decoration: const InputDecoration(hintText: 'Tulis komentar...', isDense: true, filled: true, fillColor: Color(0xFF0F172A)))),
+                      IconButton(icon: const Icon(Icons.send, color: Color(0xFF38BDF8)), onPressed: postComment),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ...comments.map((c) => Card(
+                    color: const Color(0xFF0F172A),
+                    child: ListTile(
+                      leading: CircleAvatar(backgroundColor: const Color(0xFF38BDF8), backgroundImage: (c['avatar'] ?? '').toString().startsWith('http') ? NetworkImage(c['avatar']) : null, child: !(c['avatar'] ?? '').toString().startsWith('http') ? const Icon(Icons.water_drop, size: 18) : null),
+                      title: Row(children: [
+                        Text(c['user'] ?? 'Warga', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        if (c['owner'] == true) const Padding(padding: EdgeInsets.only(left: 4), child: Icon(Icons.workspace_premium, color: Color(0xFFFBBF24), size: 15)),
+                      ]),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(c['rank'] ?? '', style: TextStyle(fontSize: 10, color: c['owner'] == true ? const Color(0xFFFBBF24) : const Color(0xFF38BDF8))),
+                          const SizedBox(height: 3),
+                          Text(c['text'] ?? '', style: const TextStyle(color: Colors.white, fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                  )),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }

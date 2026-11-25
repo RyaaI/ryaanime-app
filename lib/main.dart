@@ -100,10 +100,26 @@ class _HomeTabState extends State<HomeTab> {
     });
   }
 
-  Future<List> fetchTop() async {
-    final res = await http.get(Uri.https('api.jikan.moe', '/v4/seasons/now', {'limit': '24'}));
-    return jsonDecode(res.body)['data'] ?? [];
+  Future<List> aniQuery(String q, Map<String, dynamic> vars) async {
+    final res = await http.post(
+      Uri.https('graphql.anilist.co', '/'),
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: jsonEncode({'query': q, 'variables': vars}),
+    ).timeout(const Duration(seconds: 12));
+    final list = jsonDecode(res.body)['data']?['Page']?['media'] as List? ?? [];
+    return list.map((m) => {
+      'title': m['title']?['romaji'] ?? m['title']?['english'] ?? 'Anime',
+      'score': m['averageScore'] != null ? (m['averageScore'] / 10).toStringAsFixed(1) : 'N/A',
+      'synopsis': (m['description'] ?? 'Tidak ada sinopsis.').toString().replaceAll(RegExp(r'<[^>]*>'), ''),
+      'episodes': m['episodes'] ?? 12,
+      'images': {'jpg': {'image_url': m['coverImage']?['large'] ?? ''}},
+    }).toList();
   }
+
+  Future<List> fetchTop() => aniQuery(
+    'query { Page(perPage: 24) { media(type: ANIME, sort: TRENDING_DESC) { title { romaji english } averageScore description episodes coverImage { large } } } }',
+    {},
+  );
 
   void openProfileDialog() {
     final nameCtrl = TextEditingController(text: name);
@@ -209,8 +225,13 @@ class _HomeTabState extends State<HomeTab> {
 class ScheduleTab extends StatelessWidget {
   const ScheduleTab({super.key});
   Future<List> fetchSched() async {
-    final res = await http.get(Uri.https('api.jikan.moe', '/v4/schedules', {'limit': '24'}));
-    return jsonDecode(res.body)['data'] ?? [];
+    final res = await http.post(
+      Uri.https('graphql.anilist.co', '/'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'query': 'query { Page(perPage: 24) { media(type: ANIME, status: RELEASING, sort: POPULARITY_DESC) { title { romaji english } averageScore description episodes coverImage { large } } } }'}),
+    );
+    final list = jsonDecode(res.body)['data']?['Page']?['media'] as List? ?? [];
+    return list.map((m) => {'title': m['title']?['romaji'] ?? 'Anime', 'score': m['averageScore'] != null ? (m['averageScore'] / 10).toStringAsFixed(1) : 'N/A', 'synopsis': (m['description'] ?? '').toString().replaceAll(RegExp(r'<[^>]*>'), ''), 'episodes': m['episodes'] ?? 12, 'images': {'jpg': {'image_url': m['coverImage']?['large'] ?? ''}}}).toList();
   }
   @override
   Widget build(BuildContext context) {
@@ -244,8 +265,13 @@ class _SearchTabState extends State<SearchTab> {
   void search(String q) async {
     if (q.trim().isEmpty) return;
     setState(() => loading = true);
-    final res = await http.get(Uri.https('api.jikan.moe', '/v4/anime', {'q': q, 'limit': '21'}));
-    setState(() { results = jsonDecode(res.body)['data'] ?? []; loading = false; });
+    final res = await http.post(
+      Uri.https('graphql.anilist.co', '/'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'query': 'query (\$s: String) { Page(perPage: 21) { media(type: ANIME, search: \$s) { title { romaji english } averageScore description episodes coverImage { large } } } }', 'variables': {'s': q}}),
+    );
+    final list = jsonDecode(res.body)['data']?['Page']?['media'] as List? ?? [];
+    setState(() { results = list.map((m) => {'title': m['title']?['romaji'] ?? 'Anime', 'score': m['averageScore'] != null ? (m['averageScore'] / 10).toStringAsFixed(1) : 'N/A', 'synopsis': (m['description'] ?? '').toString().replaceAll(RegExp(r'<[^>]*>'), ''), 'episodes': m['episodes'] ?? 12, 'images': {'jpg': {'image_url': m['coverImage']?['large'] ?? ''}}}).toList(); loading = false; });
   }
   @override
   Widget build(BuildContext context) {

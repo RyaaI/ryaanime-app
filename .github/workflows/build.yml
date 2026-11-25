@@ -12,7 +12,23 @@ jobs:
           flutter create . --project-name ryaanime --org com.ryaal.ryaanime
           awk 'NR==1{print; print "    <uses-permission android:name=\"android.permission.INTERNET\"/>"; next}1' android/app/src/main/AndroidManifest.xml > tmp.xml && mv tmp.xml android/app/src/main/AndroidManifest.xml
           sed -i 's/android:label="ryaanime"/android:label="RyaaNime"/g' android/app/src/main/AndroidManifest.xml
-          python3 -c 'import urllib.request, json; d=json.loads(urllib.request.urlopen("https://jikan.moe").read()); urllib.request.urlretrieve(d["data"]["images"]["jpg"]["image_url"], "assets/icon.png")'
+          python3 -c '
+          import zlib, struct
+          w, h = 512, 512
+          raw = bytearray()
+          for y in range(h):
+              raw.append(0)
+              for x in range(w):
+                  dx, dy = (x - 256) / 190.0, (y - 275) / 145.0
+                  r, g, b = 11, 17, 32
+                  if dx*dx + dy*dy <= 1.0 and y <= 370:
+                      r, g, b = 56, 189, 248
+                      if (x - 195)**2 + (y - 220)**2 <= 320: r, g, b = 224, 242, 254
+                      if (abs(x - 215) <= 22 and abs(y - 285) <= 5) or (abs(x - 297) <= 22 and abs(y - 285) <= 5): r, g, b = 15, 23, 42
+                  raw.extend((r, g, b))
+          chk = lambda t, d: struct.pack("!I", len(d)) + t + d + struct.pack("!I", zlib.crc32(t + d) & 0xffffffff)
+          open("assets/icon.png", "wb").write(b"\x89PNG\r\n\x1a\n" + chk(b"IHDR", struct.pack("!IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chk(b"IDAT", zlib.compress(bytes(raw), 9)) + chk(b"IEND", b""))
+          '
           flutter pub get
           dart run flutter_launcher_icons
           flutter build apk --release

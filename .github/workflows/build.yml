@@ -29,7 +29,7 @@ jobs:
           chk = lambda t, d: struct.pack("!I", len(d)) + t + d + struct.pack("!I", zlib.crc32(t + d) & 0xffffffff)
           open("assets/icon.png", "wb").write(b"\x89PNG\r\n\x1a\n" + chk(b"IHDR", struct.pack("!IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chk(b"IDAT", zlib.compress(bytes(raw), 9)) + chk(b"IEND", b""))
           '
-          flutter pub get
+          sed -i "s/minSdk = flutter.minSdkVersion/minSdk = 21/g" android/app/build.gradle.kts; flutter pub get
           dart run flutter_launcher_icons
           flutter build apk --release
       - uses: actions/upload-artifact@v4

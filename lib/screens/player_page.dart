@@ -238,6 +238,18 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
           _loading = false;
           _statusMsg = label;
         });
+            wv.runJavaScript('''
+              (function() {
+                var meta = document.querySelector('meta[name="viewport"]');
+                if (!meta) {
+                  meta = document.createElement('meta');
+                  meta.name = 'viewport';
+                  document.head.appendChild(meta);
+                }
+                meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+                document.documentElement.style.touchAction = 'manipulation';
+              })();
+            ''');
         _startWatchTracker();
         return;
       } catch (_) {}
@@ -287,17 +299,28 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
     _startWatchTracker();
   }
 
-  void _toggleFullscreen() {
+  Future<void> _toggleFullscreen() async {
+    final wasPlaying = _videoCtrl != null &&
+        _videoCtrl!.value.isInitialized &&
+        _videoCtrl!.value.isPlaying;
+    if (wasPlaying) {
+      await _videoCtrl!.pause();
+    }
+    if (!mounted) return;
     setState(() => _isFullscreen = !_isFullscreen);
     if (_isFullscreen) {
-      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-      SystemChrome.setPreferredOrientations([
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      await SystemChrome.setPreferredOrientations([
         DeviceOrientation.landscapeLeft,
         DeviceOrientation.landscapeRight,
       ]);
     } else {
-      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-      SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    }
+    if (wasPlaying && _videoCtrl != null && mounted) {
+      await Future.delayed(const Duration(milliseconds: 220));
+      if (mounted) await _videoCtrl!.play();
     }
   }
 

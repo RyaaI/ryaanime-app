@@ -874,19 +874,27 @@ class _ProfileModalState extends State<_ProfileModal> {
     final picked = await picker.pickImage(source: ImageSource.gallery);
     if (picked == null) return;
 
-    final docDir = Directory('/data/user/0/com.ryaai.ryaanime/files');
-    if (!docDir.existsSync()) docDir.createSync(recursive: true);
-    final ext = picked.path.split('.').last;
-    final destPath =
-        '${docDir.path}/avatar_${DateTime.now().millisecondsSinceEpoch}.$ext';
-    await File(picked.path).copy(destPath);
+    String finalPath = picked.path;
+    try {
+      final ext = picked.path.contains('.') ? picked.path.split('.').last : 'jpg';
+      final dir = Directory('${Directory.systemTemp.path}/ryaanime_avatars');
+      if (!dir.existsSync()) dir.createSync(recursive: true);
+      final destPath = '${dir.path}/avatar_${DateTime.now().millisecondsSinceEpoch}.$ext';
+      await File(picked.path).copy(destPath);
+      finalPath = destPath;
+    } catch (_) {
+      finalPath = picked.path;
+    }
+
+    PaintingBinding.instance.imageCache.clear();
+    PaintingBinding.instance.imageCache.clearLiveImages();
 
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('avatar_path', destPath);
+    await prefs.setString('avatar_path', finalPath);
     await SessionManager.persistActiveProfile();
     await widget.onChanged();
     if (!mounted) return;
-    setState(() => _avatar = destPath);
+    setState(() => _avatar = finalPath);
   }
 
   int _requiredLevelForKey(String key) {

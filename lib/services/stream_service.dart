@@ -62,7 +62,7 @@ class StreamService {
           final eid = (ep['episodeId'] ?? '').toString().trim();
           if (eid.isNotEmpty &&
               (epTitle == '$episode' ||
-                  RegExp('(?:^|\\D)$episode(?:$|\\D)').hasMatch(epTitle))) {
+                  RegExp(r'(?:^|\D)' '$episode' r'(?=$|\D)').hasMatch(epTitle))) {
             episodeId = eid;
             break;
           }

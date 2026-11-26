@@ -729,7 +729,7 @@ class _SearchTabState extends State<_SearchTab> {
       final res = await AniService.queryMedia(q, vars);
       if (!mounted) return;
       setState(() {
-        _results = res;
+        _results = List<Map<String, dynamic>>.from(res);
         _loading = false;
       });
     } catch (_) {

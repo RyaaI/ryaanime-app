@@ -261,16 +261,7 @@ class _AuthGateState extends State<AuthGate> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  GestureDetector(
-                    onTap: _pickAvatar,
-                    child: TempestStore.buildAvatar(avatarPath, 'b_slime', radius: 34),
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton.icon(
-                    onPressed: _pickAvatar,
-                    icon: const Icon(Icons.photo_library_rounded, size: 16, color: Color(0xFF38BDF8)),
-                    label: const Text('Pilih Foto / GIF dari Galeri', style: TextStyle(color: Color(0xFF38BDF8), fontSize: 12)),
-                  ),
+                  TempestStore.buildAvatar('', 'b_slime', radius: 34),
                   const SizedBox(height: 6),
                   Text(isRegister ? 'Daftar Warga Tempest' : 'Masuk ke RyaaNime', style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: Colors.white)),
                   const SizedBox(height: 14),

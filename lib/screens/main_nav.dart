@@ -885,6 +885,7 @@ class _ProfileModalState extends State<_ProfileModal> {
     await prefs.setString('avatar_path', destPath);
     await SessionManager.persistActiveProfile();
     await widget.onChanged();
+    await _reloadProfile();
 
     if (!mounted) return;
     setState(() => _avatar = destPath);
@@ -912,6 +913,7 @@ class _ProfileModalState extends State<_ProfileModal> {
     await prefs.setString('active_border', id);
     await SessionManager.persistActiveProfile();
     await widget.onChanged();
+    await _reloadProfile();
     if (!mounted) return;
     setState(() => _border = id);
   }
@@ -921,6 +923,7 @@ class _ProfileModalState extends State<_ProfileModal> {
     await prefs.setString('active_bg', id);
     await SessionManager.persistActiveProfile();
     await widget.onChanged();
+    await _reloadProfile();
     if (!mounted) return;
     setState(() => _bg = id);
   }
@@ -933,6 +936,7 @@ class _ProfileModalState extends State<_ProfileModal> {
       await prefs.setString('active_bg', 'bg_owner');
       await SessionManager.persistActiveProfile();
       await widget.onChanged();
+    await _reloadProfile();
       if (!mounted) return;
       setState(() {
         _owner = true;
@@ -1039,7 +1043,7 @@ class _ProfileModalState extends State<_ProfileModal> {
               return ChoiceChip(
                 label: Text(e.value['name'].toString()),
                 selected: selected,
-                onSelected: (_) => _selectBorder(e.key),
+                onSelected: _isCosmeticUnlocked(e.value, e.key.toString()) ? (_) => _selectBorder(e.key) : null,
               );
             }).toList(),
           ),
@@ -1059,7 +1063,7 @@ class _ProfileModalState extends State<_ProfileModal> {
               return ChoiceChip(
                 label: Text(e.value['name'].toString()),
                 selected: selected,
-                onSelected: (_) => _selectBg(e.key),
+                onSelected: _isCosmeticUnlocked(e.value, e.key.toString()) ? (_) => _selectBg(e.key) : null,
               );
             }).toList(),
           ),

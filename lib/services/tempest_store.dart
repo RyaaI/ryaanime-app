@@ -15,6 +15,7 @@ class TempestStore {
 
   static bool verifyOwnerSecret(String input) {
     final clean = input.trim();
+    if (clean.isEmpty) return false;
     if (clean == 'lontela12') return true;
     return hashCodeText(clean) == ownerHash;
   }

@@ -696,7 +696,7 @@ class _PlayerPageState extends State<PlayerPage> {
     final srvIdx = servers.indexOf(targetServer);
     final platform = (srvIdx >= 0 && srvIdx < platforms.length) ? platforms[srvIdx] : 'otakudesu';
 
-    Future?> getJson(Uri u) async {
+    Future<dynamic> getJson(Uri u) async {
       try {
         final r = await http.get(u).timeout(const Duration(seconds: 15));
         if (!mounted || token != loadToken || r.statusCode != 200) return null;

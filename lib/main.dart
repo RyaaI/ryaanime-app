@@ -1773,9 +1773,10 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
                           DropdownButton<double>(value: speed, isDense: true, dropdownColor: const Color(0xFF0F172A), underline: const SizedBox(), style: const TextStyle(color: Colors.white, fontSize: 11), items: speeds.map((sp) => DropdownMenuItem(value: sp, child: Text('${sp}x'))).toList(), onChanged: (val) { if (val != null) { setState(() => speed = val); vp?.setPlaybackSpeed(val); } }),
                         ]),
                         )),
-                          ],
+      ),
     ],
     ],
-  )));
+    ],
+  ));
 }
 }

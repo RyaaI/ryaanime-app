@@ -17,7 +17,7 @@ class TempestStore {
     return hashCodeText(input) == ownerHash;
   }
 
-  static final List> quests = [
+  static final List<Map<String, dynamic>> quests = [
     {'id': 'q_d', 'rank': 'Rank D', 'title': 'Pendatang Baru Tempest', 'desc': 'Tonton 1 Episode anime', 'type': 'watch', 'target': 1, 'exp': 100, 'border': 'b_slime', 'bg': 'bg_slate', 'color': 0xFF38BDF8},
     {'id': 'q_c', 'rank': 'Rank C', 'title': 'Pengamat Cerdik', 'desc': 'Tonton 5 Episode anime', 'type': 'watch', 'target': 5, 'exp': 250, 'border': 'b_kijin', 'bg': 'bg_ember', 'color': 0xFFF87171},
     {'id': 'q_b', 'rank': 'Rank B', 'title': 'Kolektor Great Sage', 'desc': 'Simpan 3 Anime Favorit', 'type': 'fav', 'target': 3, 'exp': 500, 'border': 'b_sage', 'bg': 'bg_matrix', 'color': 0xFF22D3EE},

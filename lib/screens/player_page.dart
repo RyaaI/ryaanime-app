@@ -47,7 +47,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
   static const int _requiredSeconds = 24 * 60;
 
   final _commentCtrl = TextEditingController();
-  List> _comments = [];
+  List<Map<String, dynamic>> _comments = [];
   String _username = 'Warga Tempest';
   String _avatarPath = '';
   String _borderId = 'b_slime';
@@ -92,7 +92,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
   Future<void> _loadProfileAndComments() async {
     final prefs = await SharedPreferences.getInstance();
     final rawComments = prefs.getString(_commentStorageKey);
-    List> parsed = [];
+    List<Map<String, dynamic>> parsed = [];
     if (rawComments != null && rawComments.isNotEmpty) {
       try {
         final list = jsonDecode(rawComments);
@@ -302,7 +302,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
   }
 
   void _showDownloadSheet() {
-    final List> links = [];
+    final List<Map<String, dynamic>> links = [];
     if (_downloadData is Map) {
       final qList = _downloadData['qualityList'];
       if (qList is List) {

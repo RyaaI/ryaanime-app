@@ -656,9 +656,6 @@ class _HomeTabState extends State<HomeTab> {
                 return ListView(
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   children: [
-                    Padding(
-                      padding: EdgeInsets.only(bottom: 8),
-
           Container(
             margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
             padding: const EdgeInsets.all(12),
@@ -696,6 +693,8 @@ class _HomeTabState extends State<HomeTab> {
               ],
             ),
           ),
+                    Padding(
+                      padding: EdgeInsets.only(bottom: 8),
                       child: Text('Sedang Tayang (Ongoing)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF38BDF8))),
                     ),
                     SizedBox(

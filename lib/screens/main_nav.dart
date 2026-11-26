@@ -316,7 +316,7 @@ class _HomeTab extends StatefulWidget {
 }
 
 class _HomeTabState extends State<_HomeTab> {
-  late Future<List>> _futureTrending;
+  late Future<List<dynamic>> _futureTrending;
 
   @override
   void initState() {
@@ -324,7 +324,7 @@ class _HomeTabState extends State<_HomeTab> {
     _futureTrending = _load();
   }
 
-  Future<List>> _load() {
+  Future<List<dynamic>> _load() {
     const q = r'''
       query {
         Page(page: 1, perPage: 24) {
@@ -345,7 +345,7 @@ class _HomeTabState extends State<_HomeTab> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List>>(
+    return FutureBuilder<List<dynamic>>(
       future: _futureTrending,
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
@@ -394,7 +394,7 @@ class _ScheduleTab extends StatefulWidget {
 
 class _ScheduleTabState extends State<_ScheduleTab> {
   int _selectedDay = DateTime.now().weekday % 7;
-  late Future<List>> _futureWeek;
+  late Future<List<dynamic>> _futureWeek;
   static const _days = [
     'Minggu',
     'Senin',
@@ -411,7 +411,7 @@ class _ScheduleTabState extends State<_ScheduleTab> {
     _futureWeek = _fetchWeek();
   }
 
-  Future<List>> _fetchWeek() async {
+  Future<List<dynamic>> _fetchWeek() async {
     final now = DateTime.now().toUtc();
     final start =
         now.subtract(Duration(days: now.weekday % 7)).millisecondsSinceEpoch ~/
@@ -475,7 +475,7 @@ class _ScheduleTabState extends State<_ScheduleTab> {
           ),
         ),
         Expanded(
-          child: FutureBuilder<List>>(
+          child: FutureBuilder<List<dynamic>>(
             future: _futureWeek,
             builder: (context, snap) {
               if (snap.connectionState == ConnectionState.waiting) {
@@ -548,8 +548,8 @@ class _HistoryTab extends StatefulWidget {
 }
 
 class _HistoryTabState extends State<_HistoryTab> {
-  List> _history = [];
-  List> _favorites = [];
+  List<Map<String, dynamic>> _history = [];
+  List<Map<String, dynamic>> _favorites = [];
 
   @override
   void initState() {
@@ -559,7 +559,7 @@ class _HistoryTabState extends State<_HistoryTab> {
 
   Future<void> _loadLists() async {
     final prefs = await SharedPreferences.getInstance();
-    List> parseList(String key) {
+    List<Map<String, dynamic>> parseList(String key) {
       try {
         final raw = prefs.getString(key) ?? '[]';
         return (jsonDecode(raw) as List)
@@ -668,7 +668,7 @@ class _SearchTabState extends State<_SearchTab> {
   final _searchCtrl = TextEditingController();
   String _selectedGenre = '';
   bool _loading = false;
-  List> _results = [];
+  List<Map<String, dynamic>> _results = [];
 
   static const List<String> _genres = [
     'Action',

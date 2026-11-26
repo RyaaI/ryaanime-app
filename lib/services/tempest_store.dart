@@ -160,7 +160,7 @@ class RankHelper {
 }
 
 class AniService {
-  static Future<List>> queryMedia(
+  static Future<List<dynamic>> queryMedia(
       String q, Map<String, dynamic> vars) async {
     final res = await http
         .post(

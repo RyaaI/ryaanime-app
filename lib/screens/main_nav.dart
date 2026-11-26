@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/tempest_store.dart';
@@ -875,7 +874,8 @@ class _ProfileModalState extends State<_ProfileModal> {
     final picked = await picker.pickImage(source: ImageSource.gallery);
     if (picked == null) return;
 
-    final docDir = await getApplicationDocumentsDirectory();
+    final docDir = Directory('/data/user/0/com.ryaai.ryaanime/files');
+    if (!docDir.existsSync()) docDir.createSync(recursive: true);
     final ext = picked.path.split('.').last;
     final destPath =
         '${docDir.path}/avatar_${DateTime.now().millisecondsSinceEpoch}.$ext';

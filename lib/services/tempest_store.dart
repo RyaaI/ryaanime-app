@@ -2,10 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class TempestStore {
-  static const String ownerHash = '5e585855e1deef5d0cf7ec5351a2e25852e8123999cd74c450d3434a39589df2';
+  static const String ownerHash =
+      '5e585855e1deef5d0cf7ec5351a2e25852e8123999cd74c450d3434a39589df2';
 
   static String hashCodeText(String raw) {
     return sha256.convert(utf8.encode(raw.trim())).toString();
@@ -15,7 +17,7 @@ class TempestStore {
     return hashCodeText(input) == ownerHash;
   }
 
-  static final List<Map<String, dynamic>> quests = [
+  static final List> quests = [
     {'id': 'q_d', 'rank': 'Rank D', 'title': 'Pendatang Baru Tempest', 'desc': 'Tonton 1 Episode anime', 'type': 'watch', 'target': 1, 'exp': 100, 'border': 'b_slime', 'bg': 'bg_slate', 'color': 0xFF38BDF8},
     {'id': 'q_c', 'rank': 'Rank C', 'title': 'Pengamat Cerdik', 'desc': 'Tonton 5 Episode anime', 'type': 'watch', 'target': 5, 'exp': 250, 'border': 'b_kijin', 'bg': 'bg_ember', 'color': 0xFFF87171},
     {'id': 'q_b', 'rank': 'Rank B', 'title': 'Kolektor Great Sage', 'desc': 'Simpan 3 Anime Favorit', 'type': 'fav', 'target': 3, 'exp': 500, 'border': 'b_sage', 'bg': 'bg_matrix', 'color': 0xFF22D3EE},
@@ -47,8 +49,10 @@ class TempestStore {
     'bg_owner': {'name': 'Imperial Throne (OWNER)', 'c1': 0xFF3B2804, 'c2': 0xFF091E3A, 'border': 0xFFFBBF24, 'tag': 'FOUNDER • OWNER'},
   };
 
-  static Widget buildAvatar(String path, String borderId, {double radius = 22, bool isOwner = false}) {
-    final b = borders[isOwner && borderId == 'b_owner' ? 'b_owner' : borderId] ?? borders['b_slime']!;
+  static Widget buildAvatar(String path, String borderId,
+      {double radius = 22, bool isOwner = false}) {
+    final b = borders[isOwner && borderId == 'b_owner' ? 'b_owner' : borderId] ??
+        borders['b_slime']!;
     final c1 = Color(b['c1'] as int);
     final c2 = Color(b['c2'] as int);
     final glow = b['glow'] == true;
@@ -66,13 +70,22 @@ class TempestStore {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             gradient: LinearGradient(colors: [c1, c2]),
-            boxShadow: glow ? [BoxShadow(color: c1.withOpacity(0.55), blurRadius: 8, spreadRadius: 1)] : [],
+            boxShadow: glow
+                ? [
+                    BoxShadow(
+                        color: c1.withOpacity(0.55),
+                        blurRadius: 8,
+                        spreadRadius: 1)
+                  ]
+                : [],
           ),
           child: CircleAvatar(
             radius: radius,
             backgroundColor: const Color(0xFF0B1120),
             backgroundImage: img,
-            child: img == null ? Icon(Icons.water_drop, size: radius, color: c1) : null,
+            child: img == null
+                ? Icon(Icons.water_drop, size: radius, color: c1)
+                : null,
           ),
         ),
         if (isOwner)
@@ -81,8 +94,18 @@ class TempestStore {
             right: -4,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-              decoration: BoxDecoration(color: const Color(0xFFFBBF24), borderRadius: BorderRadius.circular(6)),
-              child: const Text('OWNER', style: TextStyle(color: Color(0xFF0B1120), fontSize: 7, fontWeight: FontWeight.w900)),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFBBF24),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Text(
+                'OWNER',
+                style: TextStyle(
+                  color: Color(0xFF0B1120),
+                  fontSize: 7,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
             ),
           ),
       ],
@@ -92,40 +115,80 @@ class TempestStore {
 
 class RankHelper {
   static Map<String, dynamic> getRank(int exp, bool isOwner) {
-    if (isOwner) return {'lvl': '∞', 'title': '[BOUNDLESS] Origin Sovereign', 'color': const Color(0xFFFBBF24), 'prog': 1.0};
+    if (isOwner) {
+      return {
+        'lvl': '∞',
+        'title': '[BOUNDLESS] Origin Sovereign',
+        'color': const Color(0xFFFBBF24),
+        'prog': 1.0,
+      };
+    }
     int lvl = (exp ~/ 100) + 1;
     double prog = (exp % 100) / 100.0;
     String title = 'Unique Slime';
     Color col = const Color(0xFF7DD3FC);
-    if (lvl >= 100) { title = 'Supreme Deity • Ciel & Rimuru'; col = const Color(0xFFFBBF24); }
-    else if (lvl >= 80) { title = 'Ultimate True Dragon'; col = const Color(0xFF22D3EE); }
-    else if (lvl >= 60) { title = 'Octagram Council'; col = const Color(0xFFFACC15); }
-    else if (lvl >= 40) { title = 'Awakened Demon Lord'; col = const Color(0xFFF59E0B); }
-    else if (lvl >= 25) { title = 'Demon Lord Seed'; col = const Color(0xFFC084FC); }
-    else if (lvl >= 15) { title = 'Tempest Executive'; col = const Color(0xFF38BDF8); }
-    else if (lvl >= 10) { title = 'Kijin Commander'; col = const Color(0xFFF87171); }
-    else if (lvl >= 6) { title = 'Hobgoblin Vanguard'; col = const Color(0xFF34D399); }
-    else if (lvl >= 3) { title = 'Tempest Citizen'; col = const Color(0xFF60A5FA); }
+    if (lvl >= 100) {
+      title = 'Supreme Deity • Ciel & Rimuru';
+      col = const Color(0xFFFBBF24);
+    } else if (lvl >= 80) {
+      title = 'Ultimate True Dragon';
+      col = const Color(0xFF22D3EE);
+    } else if (lvl >= 60) {
+      title = 'Octagram Council';
+      col = const Color(0xFFFACC15);
+    } else if (lvl >= 40) {
+      title = 'Awakened Demon Lord';
+      col = const Color(0xFFF59E0B);
+    } else if (lvl >= 25) {
+      title = 'Demon Lord Seed';
+      col = const Color(0xFFC084FC);
+    } else if (lvl >= 15) {
+      title = 'Tempest Executive';
+      col = const Color(0xFF38BDF8);
+    } else if (lvl >= 10) {
+      title = 'Kijin Commander';
+      col = const Color(0xFFF87171);
+    } else if (lvl >= 6) {
+      title = 'Hobgoblin Vanguard';
+      col = const Color(0xFF34D399);
+    } else if (lvl >= 3) {
+      title = 'Tempest Citizen';
+      col = const Color(0xFF60A5FA);
+    }
     return {'lvl': '$lvl', 'title': title, 'color': col, 'prog': prog};
   }
 }
 
 class AniService {
-  static Future<List<Map<String, dynamic>>> queryMedia(String q, Map<String, dynamic> vars) async {
-    final res = await http.post(
-      Uri.https('graphql.anilist.co', '/'),
-      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-      body: jsonEncode({'query': q, 'variables': vars}),
-    ).timeout(const Duration(seconds: 15));
+  static Future<List>> queryMedia(
+      String q, Map<String, dynamic> vars) async {
+    final res = await http
+        .post(
+          Uri.https('graphql.anilist.co', '/'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode({'query': q, 'variables': vars}),
+        )
+        .timeout(const Duration(seconds: 15));
     final list = jsonDecode(res.body)['data']?['Page']?['media'] as List? ?? [];
-    return list.map<Map<String, dynamic>>((m) => {
-      'id': m['id'] ?? 0,
-      'title': m['title']?['romaji'] ?? m['title']?['english'] ?? 'Anime',
-      'score': m['averageScore'] != null ? (m['averageScore'] / 10).toStringAsFixed(1) : 'N/A',
-      'synopsis': (m['description'] ?? 'Tidak ada sinopsis.').toString().replaceAll(RegExp(r'<[^>]*>'), ''),
-      'episodes': m['episodes'] ?? (m['nextAiringEpisode']?['episode'] ?? 12),
-      'nextEp': m['nextAiringEpisode']?['episode'],
-      'img': m['coverImage']?['large'] ?? '',
+    return list.map>((m) {
+      return {
+        'id': m['id'] ?? 0,
+        'title': m['title']?['romaji'] ?? m['title']?['english'] ?? 'Anime',
+        'romaji': m['title']?['romaji'] ?? '',
+        'english': m['title']?['english'] ?? '',
+        'score': m['averageScore'] != null
+            ? (m['averageScore'] / 10).toStringAsFixed(1)
+            : 'N/A',
+        'synopsis': (m['description'] ?? 'Tidak ada sinopsis.')
+            .toString()
+            .replaceAll(RegExp(r'<[^>]*>'), ''),
+        'episodes': m['episodes'] ?? (m['nextAiringEpisode']?['episode'] ?? 12),
+        'nextEp': m['nextAiringEpisode']?['episode'],
+        'img': m['coverImage']?['large'] ?? '',
+      };
     }).toList();
   }
 }
@@ -137,7 +200,8 @@ class SessionManager {
   static String _passHash(String raw) =>
       sha256.convert(utf8.encode(raw.trim())).toString();
 
-  static Future> _loadUsers(SharedPreferences prefs) async {
+  static Future> _loadUsers(
+      SharedPreferences prefs) async {
     final raw = prefs.getString(_usersKey);
     if (raw == null || raw.isEmpty) return {};
     try {
@@ -215,11 +279,13 @@ class SessionManager {
   static Future<void> _syncToActivePrefs(
       SharedPreferences prefs, Map<String, dynamic> rec) async {
     await prefs.setBool('logged_in', true);
-    await prefs.setString('username', (rec['username'] ?? 'Warga Tempest').toString());
+    await prefs.setString(
+        'username', (rec['username'] ?? 'Warga Tempest').toString());
     await prefs.setBool('is_owner', rec['isOwner'] == true);
     await prefs.setInt('exp', (rec['exp'] is int) ? rec['exp'] as int : 0);
     await prefs.setString('avatar_path', (rec['avatar'] ?? '').toString());
-    await prefs.setString('active_border', (rec['border'] ?? 'b_slime').toString());
+    await prefs.setString(
+        'active_border', (rec['border'] ?? 'b_slime').toString());
     await prefs.setString('active_bg', (rec['bg'] ?? 'bg_slate').toString());
   }
 

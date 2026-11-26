@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:webview_flutter/webview_flutter.dart';
+import 'package:video_player/video_player.dart';
 
 void main() => runApp(const RyaaNimeApp());
 
@@ -629,124 +629,628 @@ class PlayerPage extends StatefulWidget {
 }
 
 class _PlayerPageState extends State<PlayerPage> {
-  late final WebViewController ctrl;
-  String quality = '720p';
+  static const String streamApiBase = 'http://191.222.39.242:3001';
+  final List<String> servers = ['Server 1', 'Server 2', 'Server 3', 'Server 4'];
+  final List<String> qualities = ['360p', '480p', '720p', '1080p'];
+  final List<double> speeds = [1.0, 1.25, 1.5, 2.0];
+
+  VideoPlayerController? vp;
+  bool ready = false;
+  bool showCtrl = true;
+  bool locked = false;
   bool fullscreen = false;
-  final commentCtrl = TextEditingController();
-  List<Map<String, dynamic>> comments = [];
+  bool autonext = true;
+  bool isNavigatingEp = false;
+
+  String server = 'Server 1';
+  String quality = '480p';
+  double speed = 1.0;
+  double bright = 0.85;
+  double vol = 0.85;
+  String userAvatar = '';
+  String statusMsg = 'Menyiapkan pemutar Tempest...';
+  int loadToken = 0;
 
   @override
   void initState() {
     super.initState();
-    final q = Uri.encodeComponent('${widget.item['title']} episode ${widget.ep} sub indo');
-    ctrl = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..loadRequest(Uri.parse('https://youtube.com'));
-    loadComments();
-  }
-
-  Future<void> loadComments() async {
-    final p = await SharedPreferences.getInstance();
-    final key = 'cmt_${widget.item['title']}_${widget.ep}';
-    final raw = p.getStringList(key) ?? [];
-    setState(() => comments = raw.map((e) => Map<String, dynamic>.from(jsonDecode(e))).toList());
-  }
-
-  Future<void> postComment() async {
-    final txt = commentCtrl.text.trim();
-    if (txt.isEmpty) return;
-    final p = await SharedPreferences.getInstance();
-    final r = RankHelper.getRank(p.getInt('exp') ?? 0, p.getBool('owner') ?? false);
-    final entry = {
-      'user': p.getString('name') ?? 'Warga Tempest',
-      'avatar': p.getString('avatar') ?? '',
-      'rank': 'Lvl. ${r['lvl']} • ${r['title']}',
-      'owner': p.getBool('owner') ?? false,
-      'text': txt,
-    };
-    final key = 'cmt_${widget.item['title']}_${widget.ep}';
-    final raw = p.getStringList(key) ?? [];
-    raw.insert(0, jsonEncode(entry));
-    await p.setStringList(key, raw);
-    commentCtrl.clear();
-    loadComments();
+    loadUser();
+    initVideo();
   }
 
   @override
   void dispose() {
+    loadToken++;
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    vp?.dispose();
     super.dispose();
+  }
+
+  Future<void> loadUser() async {
+    final p = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() => userAvatar = p.getString('avatar') ?? '');
+  }
+
+  String _fmtDuration(Duration d) {
+    final totalSec = d.inSeconds < 0 ? 0 : d.inSeconds;
+    final h = totalSec ~/ 3600;
+    final m = (totalSec % 3600) ~/ 60;
+    final s = totalSec % 60;
+    if (h > 0) {
+      return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+    }
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  }
+
+  Future<String?> _fetchStreamUrlForServer(String targetServer, int token) async {
+    if (streamApiBase == 'MASUKKAN_API_DISINI' || streamApiBase.trim().isEmpty) {
+      return null;
+    }
+    final base = streamApiBase.trim().replaceAll(RegExp(r'/+$'), '');
+    final title = (widget.item['title'] ?? '').toString().trim();
+    final directId = (widget.item['animeId'] ?? widget.item['id'] ?? '').toString().trim();
+
+    const platforms = ['otakudesu', 'oploverz', 'samehadaku', 'kuramanime'];
+    final srvIdx = servers.indexOf(targetServer);
+    final platform = (srvIdx >= 0 && srvIdx < platforms.length) ? platforms[srvIdx] : 'otakudesu';
+
+    Future?> getJson(Uri u) async {
+      try {
+        final r = await http.get(u).timeout(const Duration(seconds: 15));
+        if (!mounted || token != loadToken || r.statusCode != 200) return null;
+        final j = jsonDecode(r.body);
+        return j is Map<String, dynamic> ? j : null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    String? extractUrl(dynamic v) {
+      if (v == null) return null;
+      final str = v.toString().trim();
+      if (str.startsWith('http://') || str.startsWith('https://')) return str;
+      return null;
+    }
+
+    try {
+      String animeId = platform == 'otakudesu' ? directId : '';
+      if (animeId.isEmpty && title.isNotEmpty) {
+        final searchJson = await getJson(Uri.parse('$base/$platform/search?q=${Uri.encodeComponent(title)}'));
+        final data = searchJson?['data'];
+        final list = (data is Map ? (data['animeList'] ?? data['searchResults'] ?? data['animes']) : null);
+        if (list is List && list.isNotEmpty && list.first is Map) {
+          final first = list.first as Map;
+          animeId = (first['animeId'] ?? first['id'] ?? first['slug'] ?? '').toString().trim();
+        }
+      }
+      if (animeId.isEmpty || !mounted || token != loadToken) return null;
+
+      final animeJson = await getJson(Uri.parse('$base/$platform/anime/${Uri.encodeComponent(animeId)}'));
+      final animeData = animeJson?['data'];
+      final epList = animeData is Map ? (animeData['episodeList'] ?? animeData['episodes']) : null;
+
+      String episodeId = '';
+      if (epList is List && epList.isNotEmpty) {
+        final targetEpStr = widget.ep.toString();
+        for (final epItem in epList) {
+          if (epItem is Map) {
+            final epTitle = (epItem['title'] ?? epItem['episode'] ?? '').toString().trim();
+            final eid = (epItem['episodeId'] ?? epItem['id'] ?? epItem['slug'] ?? '').toString().trim();
+            if (eid.isNotEmpty && (epTitle == targetEpStr || RegExp(r'(?:^|\D)' + RegExp.escape(targetEpStr) + r'(?:$|\D)').hasMatch(epTitle))) {
+              episodeId = eid;
+              break;
+            }
+          }
+        }
+        if (episodeId.isEmpty && epList.first is Map) {
+          final firstEp = epList.first as Map;
+          episodeId = (firstEp['episodeId'] ?? firstEp['id'] ?? firstEp['slug'] ?? '').toString().trim();
+        }
+      }
+      if (episodeId.isEmpty || !mounted || token != loadToken) return null;
+
+      final epJson = await getJson(Uri.parse('$base/$platform/episode/${Uri.encodeComponent(episodeId)}'));
+      final epData = epJson?['data'];
+      final details = (epData is Map && epData['details'] is Map) ? epData['details'] as Map : (epData is Map ? epData : null);
+      if (details == null) return null;
+
+      String? serverId;
+      final qList = details['server'] is Map ? details['server']['qualityList'] : null;
+      if (qList is List && qList.isNotEmpty) {
+        Map? chosenQual;
+        final qClean = quality.replaceAll('p', '').trim();
+        for (final qItem in qList) {
+          if (qItem is Map) {
+            final qTitle = (qItem['title'] ?? '').toString();
+            if (qTitle.contains(quality) || (qClean.isNotEmpty && qTitle.contains(qClean))) {
+              chosenQual = qItem;
+              break;
+            }
+          }
+        }
+        chosenQual ??= qList.first is Map ? qList.first as Map : null;
+
+        final srvList = chosenQual?['serverList'];
+        if (srvList is List && srvList.isNotEmpty && srvList.first is Map) {
+          serverId = (srvList.first['serverId'] ?? '').toString().trim();
+        }
+      }
+
+      if (serverId != null && serverId.isNotEmpty) {
+        final srvJson = await getJson(Uri.parse('$base/$platform/server/${Uri.encodeComponent(serverId)}'));
+        final srvDetails = srvJson?['data']?['details'];
+        final streamUrl = extractUrl(srvDetails is Map ? srvDetails['url'] : srvJson?['data']?['url']);
+        if (streamUrl != null) return streamUrl;
+      }
+
+      return extractUrl(details['defaultStreamingUrl'] ?? details['url'] ?? details['streamUrl']);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> initVideo({bool autoFallback = true}) async {
+    final int token = ++loadToken;
+    final String title = (widget.item['title'] ?? 'Anime').toString();
+
+    setState(() {
+      ready = false;
+      statusMsg = 'Memuat stream $title Ep ${widget.ep} ($server)...';
+    });
+
+    if (streamApiBase == 'MASUKKAN_API_DISINI' || streamApiBase.trim().isEmpty) {
+      if (!mounted || token != loadToken) return;
+      setState(() {
+        statusMsg = 'API Stream belum terhubung (Ep ${widget.ep} • $quality • $server)';
+      });
+      return;
+    }
+
+    final startIdx = servers.indexOf(server).clamp(0, servers.length - 1);
+    final candidateServers = autoFallback
+        ? [
+            servers[startIdx],
+            for (int i = 0; i < servers.length; i++)
+              if (i != startIdx) servers[i],
+          ]
+        : [servers[startIdx]];
+
+    String? chosenUrl;
+    String activeServer = server;
+
+    for (final srv in candidateServers) {
+      if (!mounted || token != loadToken) return;
+      setState(() {
+        statusMsg = 'Mencoba $srv • Ep ${widget.ep} ($quality)...';
+      });
+      final url = await _fetchStreamUrlForServer(srv, token);
+      if (!mounted || token != loadToken) return;
+      if (url != null && url.isNotEmpty) {
+        chosenUrl = url;
+        activeServer = srv;
+        break;
+      }
+    }
+
+    if (!mounted || token != loadToken) return;
+
+    if (chosenUrl == null || chosenUrl.isEmpty) {
+      setState(() {
+        statusMsg = 'Stream tidak tersedia pada 4 server (Ep ${widget.ep} • $quality)';
+      });
+      return;
+    }
+
+    final oldController = vp;
+    final newController = VideoPlayerController.networkUrl(Uri.parse(chosenUrl));
+
+    try {
+      await newController.initialize();
+      if (!mounted || token != loadToken) {
+        await newController.dispose();
+        return;
+      }
+
+      await oldController?.dispose();
+      vp = newController;
+      await vp!.setVolume(vol);
+      await vp!.setPlaybackSpeed(speed);
+      await vp!.play();
+
+      vp!.addListener(() {
+        if (!mounted || token != loadToken || vp == null) return;
+        final val = vp!.value;
+        if (ready &&
+            autonext &&
+            !isNavigatingEp &&
+            val.duration > Duration.zero &&
+            val.position >= val.duration) {
+          final maxEp = (widget.item['episodes'] is int) ? widget.item['episodes'] as int : 12;
+          if (widget.ep < maxEp) {
+            isNavigatingEp = true;
+            _goToEpisode(widget.ep + 1);
+          }
+        }
+        if (mounted) setState(() {});
+      });
+
+      setState(() {
+        server = activeServer;
+        ready = true;
+      });
+    } catch (_) {
+      await newController.dispose();
+      if (!mounted || token != loadToken) return;
+      setState(() {
+        ready = false;
+        statusMsg = 'Gagal memutar video dari $activeServer (Ep ${widget.ep})';
+      });
+    }
+  }
+
+  Future<void> _goToEpisode(int nextEp) async {
+    if (!mounted) return;
+    await vp?.pause();
+    await Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PlayerPage(item: widget.item, ep: nextEp),
+      ),
+    );
+  }
+
+  Future<void> _seekBy(int seconds) async {
+    if (vp == null || !ready) return;
+    final dur = vp!.value.duration;
+    final target = vp!.value.position + Duration(seconds: seconds);
+    final clamped = target < Duration.zero
+        ? Duration.zero
+        : (target > dur ? dur : target);
+    await vp!.seekTo(clamped);
+  }
+
+  Future<void> _toggleFullscreen() async {
+    final next = !fullscreen;
+    setState(() => fullscreen = next);
+    if (next) {
+      await SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    } else {
+      await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final title = '${widget.item['title']} • Ep ${widget.ep}';
+    final title = (widget.item['title'] ?? 'Anime').toString();
+    final maxEp = (widget.item['episodes'] is int) ? widget.item['episodes'] as int : 12;
+    final pos = vp?.value.position ?? Duration.zero;
+    final dur = vp?.value.duration ?? Duration.zero;
+    final isPlaying = vp?.value.isPlaying ?? false;
+
     return Scaffold(
-      appBar: fullscreen ? null : AppBar(title: Text(title, style: const TextStyle(fontSize: 14)), backgroundColor: const Color(0xFF0F172A)),
-      body: Column(
-        children: [
-          SizedBox(height: fullscreen ? MediaQuery.of(context).size.height : 230, child: WebViewWidget(controller: ctrl)),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            color: const Color(0xFF0F172A),
-            child: Row(
-              children: [
-                const Text('Kualitas: ', style: TextStyle(fontSize: 12, color: Colors.white70)),
-                DropdownButton<String>(
-                  value: quality,
-                  dropdownColor: const Color(0xFF0F172A),
-                  underline: const SizedBox(),
-                  style: const TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 12),
-                  items: ['360p', '480p', '720p', '1080p'].map((q) => DropdownMenuItem(value: q, child: Text(q))).toList(),
-                  onChanged: (v) { if (v != null) setState(() => quality = v); },
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        top: !fullscreen,
+        bottom: !fullscreen,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            setState(() => showCtrl = !showCtrl);
+          },
+          onVerticalDragUpdate: locked
+              ? null
+              : (details) {
+                  final width = MediaQuery.of(context).size.width;
+                  final delta = -(details.primaryDelta ?? 0) / 220.0;
+                  if (details.globalPosition.dx < width * 0.45) {
+                    setState(() => bright = (bright + delta).clamp(0.15, 1.0));
+                  } else if (details.globalPosition.dx > width * 0.55) {
+                    final nextVol = (vol + delta).clamp(0.0, 1.0);
+                    setState(() => vol = nextVol);
+                    vp?.setVolume(nextVol);
+                  }
+                },
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Center(
+                child: ready && vp != null
+                    ? AspectRatio(
+                        aspectRatio: vp!.value.aspectRatio > 0
+                            ? vp!.value.aspectRatio
+                            : 16 / 9,
+                        child: VideoPlayer(vp!),
+                      )
+                    : Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const CircularProgressIndicator(color: Color(0xFF38BDF8)),
+                            const SizedBox(height: 14),
+                            Text(
+                              statusMsg,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.white70, fontSize: 13),
+                            ),
+                          ],
+                        ),
+                      ),
+              ),
+              IgnorePointer(
+                child: Container(
+                  color: Colors.black.withOpacity((1.0 - bright) * 0.75),
                 ),
-                const Spacer(),
-                IconButton(
-                  icon: Icon(fullscreen ? Icons.fullscreen_exit : Icons.fullscreen, color: const Color(0xFFFBBF24)),
-                  onPressed: () {
-                    setState(() => fullscreen = !fullscreen);
-                    SystemChrome.setPreferredOrientations(fullscreen ? [DeviceOrientation.landscapeLeft] : [DeviceOrientation.portraitUp]);
-                  },
+              ),
+              if (showCtrl)
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: IconButton(
+                    icon: Icon(
+                      locked ? Icons.lock : Icons.lock_open,
+                      color: locked ? const Color(0xFFFFBBF24) : Colors.white,
+                    ),
+                    onPressed: () => setState(() => locked = !locked),
+                  ),
                 ),
-              ],
-            ),
-          ),
-          if (!fullscreen)
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(10),
-                children: [
-                  const Text('Komentar Warga Tempest', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF38BDF8))),
-                  const SizedBox(height: 8),
-                  Row(
+              if (showCtrl && !locked) ...[
+                Positioned(
+                  top: 10,
+                  left: 8,
+                  right: 56,
+                  child: Row(
                     children: [
-                      Expanded(child: TextField(controller: commentCtrl, decoration: const InputDecoration(hintText: 'Tulis komentar...', isDense: true, filled: true, fillColor: Color(0xFF0F172A)))),
-                      IconButton(icon: const Icon(Icons.send, color: Color(0xFF38BDF8)), onPressed: postComment),
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back, color: Colors.white),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              'Episode ${widget.ep}',
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  ...comments.map((c) => Card(
-                    color: const Color(0xFF0F172A),
-                    child: ListTile(
-                      leading: CircleAvatar(backgroundColor: const Color(0xFF38BDF8), backgroundImage: (c['avatar'] ?? '').toString().startsWith('http') ? NetworkImage(c['avatar']) : null, child: !(c['avatar'] ?? '').toString().startsWith('http') ? const Icon(Icons.water_drop, size: 18) : null),
-                      title: Row(children: [
-                        Text(c['user'] ?? 'Warga', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                        if (c['owner'] == true) const Padding(padding: EdgeInsets.only(left: 4), child: Icon(Icons.workspace_premium, color: Color(0xFFFBBF24), size: 15)),
-                      ]),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                ),
+                Positioned(
+                  left: 10,
+                  top: 80,
+                  bottom: 95,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        '${(bright * 100).round()}%',
+                        style: const TextStyle(color: Colors.white70, fontSize: 11),
+                      ),
+                      Expanded(
+                        child: RotatedBox(
+                          quarterTurns: 3,
+                          child: Slider(
+                            value: bright,
+                            min: 0.15,
+                            max: 1.0,
+                            activeColor: Colors.white,
+                            inactiveColor: Colors.white24,
+                            onChanged: (v) => setState(() => bright = v),
+                          ),
+                        ),
+                      ),
+                      const Icon(Icons.wb_sunny, color: Colors.white70, size: 16),
+                    ],
+                  ),
+                ),
+                Positioned(
+                  right: 10,
+                  top: 80,
+                  bottom: 95,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        '${(vol * 100).round()}%',
+                        style: const TextStyle(color: Colors.white70, fontSize: 11),
+                      ),
+                      Expanded(
+                        child: RotatedBox(
+                          quarterTurns: 3,
+                          child: Slider(
+                            value: vol,
+                            min: 0.0,
+                            max: 1.0,
+                            activeColor: Colors.white,
+                            inactiveColor: Colors.white24,
+                            onChanged: (v) {
+                              setState(() => vol = v);
+                              vp?.setVolume(v);
+                            },
+                          ),
+                        ),
+                      ),
+                      Icon(
+                        vol == 0 ? Icons.volume_off : Icons.volume_up,
+                        color: Colors.white70,
+                        size: 16,
+                      ),
+                    ],
+                  ),
+                ),
+                Center(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        iconSize: 34,
+                        icon: const Icon(Icons.replay_10, color: Colors.white),
+                        onPressed: () => _seekBy(-10),
+                      ),
+                      const SizedBox(width: 18),
+                      IconButton(
+                        iconSize: 52,
+                        icon: Icon(
+                          isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
+                          color: Colors.white,
+                        ),
+                        onPressed: () async {
+                          if (!ready || vp == null) return;
+                          if (isPlaying) {
+                            await vp!.pause();
+                          } else {
+                            await vp!.play();
+                          }
+                          if (mounted) setState(() {});
+                        },
+                      ),
+                      const SizedBox(width: 18),
+                      IconButton(
+                        iconSize: 34,
+                        icon: const Icon(Icons.forward_10, color: Colors.white),
+                        onPressed: () => _seekBy(10),
+                      ),
+                      if (widget.ep < maxEp) ...[
+                        const SizedBox(width: 14),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              iconSize: 34,
+                              icon: const Icon(Icons.skip_next, color: Colors.white),
+                              onPressed: () => _goToEpisode(widget.ep + 1),
+                            ),
+                            Text(
+                              'Episode ${widget.ep + 1}',
+                              style: const TextStyle(color: Colors.white70, fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                Positioned(
+                  left: 12,
+                  right: 12,
+                  bottom: 8,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (ready && vp != null)
+                        VideoProgressIndicator(
+                          vp!,
+                          allowScrubbing: true,
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          colors: const VideoProgressColors(
+                            playedColor: Color(0xFFEF4444),
+                            bufferedColor: Colors.white38,
+                            backgroundColor: Colors.white12,
+                          ),
+                        ),
+                      Row(
                         children: [
-                          Text(c['rank'] ?? '', style: TextStyle(fontSize: 10, color: c['owner'] == true ? const Color(0xFFFBBF24) : const Color(0xFF38BDF8))),
-                          const SizedBox(height: 3),
-                          Text(c['text'] ?? '', style: const TextStyle(color: Colors.white, fontSize: 12)),
+                          Text(
+                            '${_fmtDuration(pos)} / ${_fmtDuration(dur)}',
+                            style: const TextStyle(color: Colors.white, fontSize: 12),
+                          ),
+                          const Spacer(),
+                          DropdownButton<String>(
+                            value: server,
+                            dropdownColor: const Color(0xFF0F172A),
+                            underline: const SizedBox(),
+                            style: const TextStyle(color: Colors.white, fontSize: 12),
+                            items: servers
+                                .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                                .toList(),
+                            onChanged: (val) {
+                              if (val == null) return;
+                              setState(() => server = val);
+                              initVideo(autoFallback: true);
+                            },
+                          ),
+                          const SizedBox(width: 6),
+                          GestureDetector(
+                            onTap: () => setState(() => autonext = !autonext),
+                            child: Text(
+                              'Autonext',
+                              style: TextStyle(
+                                color: autonext ? const Color(0xFF38BDF8) : Colors.white54,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          DropdownButton<String>(
+                            value: quality,
+                            dropdownColor: const Color(0xFF0F172A),
+                            underline: const SizedBox(),
+                            style: const TextStyle(color: Colors.white, fontSize: 12),
+                            items: qualities
+                                .map((q) => DropdownMenuItem(value: q, child: Text(q)))
+                                .toList(),
+                            onChanged: (val) {
+                              if (val == null) return;
+                              setState(() => quality = val);
+                              initVideo(autoFallback: true);
+                            },
+                          ),
+                          const SizedBox(width: 6),
+                          DropdownButton<double>(
+                            value: speed,
+                            dropdownColor: const Color(0xFF0F172A),
+                            underline: const SizedBox(),
+                            style: const TextStyle(color: Colors.white, fontSize: 12),
+                            items: speeds
+                                .map((sp) => DropdownMenuItem(value: sp, child: Text('${sp}x')))
+                                .toList(),
+                            onChanged: (val) {
+                              if (val == null) return;
+                              setState(() => speed = val);
+                              vp?.setPlaybackSpeed(val);
+                            },
+                          ),
+                          IconButton(
+                            icon: Icon(
+                              fullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                              color: Colors.white,
+                            ),
+                            onPressed: _toggleFullscreen,
+                          ),
                         ],
                       ),
-                    ),
-                  )),
-                ],
-              ),
-            ),
-        ],
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }

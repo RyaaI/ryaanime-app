@@ -885,8 +885,6 @@ class _ProfileModalState extends State<_ProfileModal> {
     await prefs.setString('avatar_path', destPath);
     await SessionManager.persistActiveProfile();
     await widget.onChanged();
-    await _reloadProfile();
-
     if (!mounted) return;
     setState(() => _avatar = destPath);
   }
@@ -925,7 +923,6 @@ class _ProfileModalState extends State<_ProfileModal> {
     await prefs.setString('active_border', id);
     await SessionManager.persistActiveProfile();
     await widget.onChanged();
-    await _reloadProfile();
     if (!mounted) return;
     setState(() => _border = id);
   }
@@ -935,7 +932,6 @@ class _ProfileModalState extends State<_ProfileModal> {
     await prefs.setString('active_bg', id);
     await SessionManager.persistActiveProfile();
     await widget.onChanged();
-    await _reloadProfile();
     if (!mounted) return;
     setState(() => _bg = id);
   }
@@ -948,7 +944,6 @@ class _ProfileModalState extends State<_ProfileModal> {
       await prefs.setString('active_bg', 'bg_owner');
       await SessionManager.persistActiveProfile();
       await widget.onChanged();
-    await _reloadProfile();
       if (!mounted) return;
       setState(() {
         _owner = true;

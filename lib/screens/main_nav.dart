@@ -901,7 +901,7 @@ class _ProfileModalState extends State<_ProfileModal> {
 
   bool _isCosmeticUnlocked(dynamic meta, [dynamic key = '']) {
     if (_owner) return true;
-    final k = key.toString();
+    final k = key.toString().toLowerCase();
     if (k.contains('owner')) return false;
     int reqLevel = 0;
     int? reqExp;
@@ -911,6 +911,15 @@ class _ProfileModalState extends State<_ProfileModal> {
       final rawExp = meta['minExp'] ?? meta['exp'] ?? meta['reqExp'];
       if (rawExp != null) {
         reqExp = rawExp is int ? rawExp : int.tryParse(rawExp.toString()) ?? 0;
+      }
+      final nameStr = (meta['name'] ?? '').toString().toLowerCase();
+      if (reqLevel == 0 && reqExp == null) {
+        if (nameStr.contains('rank ex')) reqLevel = 15;
+        else if (nameStr.contains('rank ss')) reqLevel = 10;
+        else if (nameStr.contains('rank s')) reqLevel = 7;
+        else if (nameStr.contains('rank a')) reqLevel = 5;
+        else if (nameStr.contains('rank b')) reqLevel = 3;
+        else if (nameStr.contains('rank c')) reqLevel = 2;
       }
     }
     final curLevel = (widget.exp ~/ 100) + 1;

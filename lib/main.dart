@@ -1767,7 +1767,15 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
                         Text(useWebView ? serverLabel : '${_fmtDuration(pos)} / ${_fmtDuration(dur)}', style: TextStyle(color: useWebView ? const Color(0xFF38BDF8) : Colors.white, fontSize: 11)),
                         const Spacer(),
                         GestureDetector(onTap: () async { final u = await webCtrl?.currentUrl(); final link = u ?? ''; if (!mounted) return; ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(link.isNotEmpty ? 'Link stream: $link' : 'Link belum siap'))); }, child: const Padding(padding: EdgeInsets.symmetric(horizontal: 4), child: Icon(Icons.download, size: 16, color: Color(0xFFFFBBF2)))), const SizedBox(width: 4), DropdownButton<String>(value: server, isDense: true, dropdownColor: const Color(0xFF0F172A), underline: const SizedBox(), style: const TextStyle(color: Colors.white, fontSize: 11), items: servers.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(), onChanged: (val) { if (val != null) { setState(() => server = val); initVideo(); } }),
-                        const SizedBox(width: 6),
-}}
-))))))
-]]]]
+                          const SizedBox(width: 6),
+                          DropdownButton<String>(value: quality, isDense: true, dropdownColor: const Color(0xFF0F172A), underline: const SizedBox(), style: const TextStyle(color: Color(0xFFFFBBF2), fontSize: 11, fontWeight: FontWeight.bold), items: qualities.map((q) => DropdownMenuItem(value: q, child: Text(q))).toList(), onChanged: (val) { if (val != null) { setState(() => quality = val); initVideo(); } }),
+                          const SizedBox(width: 4),
+                          DropdownButton<double>(value: speed, isDense: true, dropdownColor: const Color(0xFF0F172A), underline: const SizedBox(), style: const TextStyle(color: Colors.white, fontSize: 11), items: speeds.map((sp) => DropdownMenuItem(value: sp, child: Text('${sp}x'))).toList(), onChanged: (val) { if (val != null) { setState(() => speed = val); vp?.setPlaybackSpeed(val); } }),
+                        ]),
+                        )),
+                          ],
+                        ))),
+                        },
+                          const SizedBox(width: 6),
+                        }
+                        ]]

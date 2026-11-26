@@ -1,3 +1,4 @@
+import 'package:webview_flutter/webview_flutter.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -620,6 +621,7 @@ class _DetailPageState extends State<DetailPage> {
     );
   }
 }
+
 class PlayerPage extends StatefulWidget {
   final Map<String, dynamic> item;
   final int ep;
@@ -634,7 +636,10 @@ class _PlayerPageState extends State<PlayerPage> {
   final List<String> qualities = ['360p', '480p', '720p', '1080p'];
   final List<double> speeds = [1.0, 1.25, 1.5, 2.0];
 
+  late int currentEp;
   VideoPlayerController? vp;
+  WebViewController? webCtrl;
+  bool useWebView = false;
   bool ready = false;
   bool showCtrl = true;
   bool locked = false;
@@ -643,24 +648,35 @@ class _PlayerPageState extends State<PlayerPage> {
   bool isNavigatingEp = false;
 
   String server = 'Server 1';
+  String serverLabel = 'Server 1';
   String quality = '480p';
   double speed = 1.0;
   double bright = 0.85;
   double vol = 0.85;
+
+  String userName = 'Warga Tempest';
   String userAvatar = '';
+  int userExp = 0;
+  bool userOwner = false;
+
   String statusMsg = 'Menyiapkan pemutar Tempest...';
   int loadToken = 0;
+  final TextEditingController commentCtrl = TextEditingController();
+  List> comments = [];
 
   @override
   void initState() {
     super.initState();
+    currentEp = widget.ep;
     loadUser();
+    loadComments();
     initVideo();
   }
 
   @override
   void dispose() {
     loadToken++;
+    commentCtrl.dispose();
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     vp?.dispose();
@@ -670,33 +686,62 @@ class _PlayerPageState extends State<PlayerPage> {
   Future<void> loadUser() async {
     final p = await SharedPreferences.getInstance();
     if (!mounted) return;
-    setState(() => userAvatar = p.getString('avatar') ?? '');
+    setState(() {
+      userName = p.getString('name') ?? 'Warga Tempest';
+      userAvatar = p.getString('avatar') ?? '';
+      userExp = p.getInt('exp') ?? 0;
+      userOwner = p.getBool('owner') ?? false;
+    });
+  }
+
+  String get _commentKey => 'comments_${widget.item['title']}_ep_$currentEp';
+
+  Future<void> loadComments() async {
+    final p = await SharedPreferences.getInstance();
+    final raw = p.getStringList(_commentKey) ?? [];
+    if (!mounted) return;
+    setState(() => comments = raw.map((e) => Map<String, dynamic>.from(jsonDecode(e))).toList());
+  }
+
+  Future<void> postComment() async {
+    final text = commentCtrl.text.trim();
+    if (text.isEmpty) return;
+    final r = RankHelper.getRank(userExp, userOwner);
+    final entry = {
+      'name': userName,
+      'avatar': userAvatar,
+      'lvl': r['lvl'],
+      'title': r['title'],
+      'isOwner': userOwner,
+      'text': text,
+      'time': 'Baru saja',
+    };
+    final p = await SharedPreferences.getInstance();
+    final updated = [entry, ...comments];
+    await p.setStringList(_commentKey, updated.map((e) => jsonEncode(e)).toList());
+    commentCtrl.clear();
+    if (!mounted) return;
+    setState(() => comments = updated);
   }
 
   String _fmtDuration(Duration d) {
-    final totalSec = d.inSeconds < 0 ? 0 : d.inSeconds;
-    final h = totalSec ~/ 3600;
-    final m = (totalSec % 3600) ~/ 60;
-    final s = totalSec % 60;
-    if (h > 0) {
-      return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
-    }
-    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+    final s = d.inSeconds < 0 ? 0 : d.inSeconds;
+    final m = (s % 3600) ~/ 60;
+    final sec = s % 60;
+    return '${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
   }
 
-  Future<String?> _fetchStreamUrlForServer(String targetServer, int token) async {
-    if (streamApiBase == 'MASUKKAN_API_DISINI' || streamApiBase.trim().isEmpty) {
-      return null;
-    }
+  bool _isDirectVideo(String url) {
+    final u = url.toLowerCase();
+    return u.contains('.mp4') || u.contains('.m3u8') || u.contains('.webm');
+  }
+
+  Future?> _fetchStream(String targetServer, int token) async {
     final base = streamApiBase.trim().replaceAll(RegExp(r'/+$'), '');
     final title = (widget.item['title'] ?? '').toString().trim();
-    final directId = (widget.item['animeId'] ?? widget.item['id'] ?? '').toString().trim();
+    final srvIdx = servers.indexOf(targetServer).clamp(0, 3);
 
-    const platforms = ['otakudesu', 'oploverz', 'samehadaku', 'kuramanime'];
-    final srvIdx = servers.indexOf(targetServer);
-    final platform = (srvIdx >= 0 && srvIdx < platforms.length) ? platforms[srvIdx] : 'otakudesu';
-
-    Future<dynamic> getJson(Uri u) async {
+    Future?> getJson(Uri u) async {
       try {
         final r = await http.get(u).timeout(const Duration(seconds: 15));
         if (!mounted || token != loadToken || r.statusCode != 200) return null;
@@ -707,154 +752,125 @@ class _PlayerPageState extends State<PlayerPage> {
       }
     }
 
-    String? extractUrl(dynamic v) {
-      if (v == null) return null;
-      final str = v.toString().trim();
-      if (str.startsWith('http://') || str.startsWith('https://')) return str;
-      return null;
-    }
-
     try {
-      String animeId = platform == 'otakudesu' ? directId : '';
-      if (animeId.isEmpty && title.isNotEmpty) {
-        final searchJson = await getJson(Uri.parse('$base/$platform/search?q=${Uri.encodeComponent(title)}'));
-        final data = searchJson?['data'];
-        final list = (data is Map ? (data['animeList'] ?? data['searchResults'] ?? data['animes']) : null);
-        if (list is List && list.isNotEmpty && list.first is Map) {
-          final first = list.first as Map;
-          animeId = (first['animeId'] ?? first['id'] ?? first['slug'] ?? '').toString().trim();
-        }
-      }
-      if (animeId.isEmpty || !mounted || token != loadToken) return null;
+      final searchJson = await getJson(Uri.parse('$base/otakudesu/search?q=${Uri.encodeComponent(title)}'));
+      final list = searchJson?['data']?['animeList'];
+      if (list is! List || list.isEmpty || list.first is! Map) return null;
+      final animeId = (list.first['animeId'] ?? '').toString().trim();
+      if (animeId.isEmpty) return null;
 
-      final animeJson = await getJson(Uri.parse('$base/$platform/anime/${Uri.encodeComponent(animeId)}'));
-      final animeData = animeJson?['data'];
-      final epList = animeData is Map ? (animeData['episodeList'] ?? animeData['episodes']) : null;
+      final animeJson = await getJson(Uri.parse('$base/otakudesu/anime/${Uri.encodeComponent(animeId)}'));
+      final epList = animeJson?['data']?['details']?['episodeList'];
+      if (epList is! List || epList.isEmpty) return null;
 
       String episodeId = '';
-      if (epList is List && epList.isNotEmpty) {
-        final targetEpStr = widget.ep.toString();
-        for (final epItem in epList) {
-          if (epItem is Map) {
-            final epTitle = (epItem['title'] ?? epItem['episode'] ?? '').toString().trim();
-            final eid = (epItem['episodeId'] ?? epItem['id'] ?? epItem['slug'] ?? '').toString().trim();
-            if (eid.isNotEmpty && (epTitle == targetEpStr || RegExp(r'(?:^|\D)' + RegExp.escape(targetEpStr) + r'(?:$|\D)').hasMatch(epTitle))) {
-              episodeId = eid;
-              break;
-            }
+      final targetStr = currentEp.toString();
+      for (final epItem in epList) {
+        if (epItem is Map) {
+          final epTitle = (epItem['title'] ?? '').toString().trim();
+          final eid = (epItem['episodeId'] ?? '').toString().trim();
+          if (eid.isNotEmpty && (epTitle == targetStr || RegExp(r'(?:^|\D)' + RegExp.escape(targetStr) + r'(?:$|\D)').hasMatch(epTitle))) {
+            episodeId = eid;
+            break;
           }
         }
-        if (episodeId.isEmpty && epList.first is Map) {
-          final firstEp = epList.first as Map;
-          episodeId = (firstEp['episodeId'] ?? firstEp['id'] ?? firstEp['slug'] ?? '').toString().trim();
-        }
       }
-      if (episodeId.isEmpty || !mounted || token != loadToken) return null;
+      if (episodeId.isEmpty) {
+        final revIdx = (epList.length - currentEp).clamp(0, epList.length - 1);
+        episodeId = (epList[revIdx]['episodeId'] ?? '').toString().trim();
+      }
+      if (episodeId.isEmpty) return null;
 
-      final epJson = await getJson(Uri.parse('$base/$platform/episode/${Uri.encodeComponent(episodeId)}'));
-      final epData = epJson?['data'];
-      final details = (epData is Map && epData['details'] is Map) ? epData['details'] as Map : (epData is Map ? epData : null);
-      if (details == null) return null;
+      final epJson = await getJson(Uri.parse('$base/otakudesu/episode/${Uri.encodeComponent(episodeId)}'));
+      final epDetails = epJson?['data']?['details'];
+      if (epDetails is! Map) return null;
 
-      String? serverId;
-      final qList = details['server'] is Map ? details['server']['qualityList'] : null;
+      final qList = epDetails['server']?['qualityList'];
       if (qList is List && qList.isNotEmpty) {
         Map? chosenQual;
-        final qClean = quality.replaceAll('p', '').trim();
+        final qClean = quality.replaceAll('p', '');
         for (final qItem in qList) {
-          if (qItem is Map) {
-            final qTitle = (qItem['title'] ?? '').toString();
-            if (qTitle.contains(quality) || (qClean.isNotEmpty && qTitle.contains(qClean))) {
-              chosenQual = qItem;
-              break;
-            }
+          if (qItem is Map && (qItem['title'] ?? '').toString().contains(qClean)) {
+            chosenQual = qItem;
+            break;
           }
         }
         chosenQual ??= qList.first is Map ? qList.first as Map : null;
 
         final srvList = chosenQual?['serverList'];
-        if (srvList is List && srvList.isNotEmpty && srvList.first is Map) {
-          serverId = (srvList.first['serverId'] ?? '').toString().trim();
+        if (srvList is List && srvList.isNotEmpty) {
+          final picked = srvList[srvIdx < srvList.length ? srvIdx : 0];
+          if (picked is Map) {
+            final serverId = (picked['serverId'] ?? '').toString().trim();
+            final mName = (picked['title'] ?? targetServer).toString().trim();
+            if (serverId.isNotEmpty) {
+              final srvJson = await getJson(Uri.parse('$base/otakudesu/server/${Uri.encodeComponent(serverId)}'));
+              final url = (srvJson?['data']?['details']?['url'] ?? '').toString().trim();
+              if (url.startsWith('http')) return {'url': url, 'label': '$targetServer ($mName)'};
+            }
+          }
         }
       }
-
-      if (serverId != null && serverId.isNotEmpty) {
-        final srvJson = await getJson(Uri.parse('$base/$platform/server/${Uri.encodeComponent(serverId)}'));
-        final srvDetails = srvJson?['data']?['details'];
-        final streamUrl = extractUrl(srvDetails is Map ? srvDetails['url'] : srvJson?['data']?['url']);
-        if (streamUrl != null) return streamUrl;
-      }
-
-      return extractUrl(details['defaultStreamingUrl'] ?? details['url'] ?? details['streamUrl']);
+      final defUrl = (epDetails['defaultStreamingUrl'] ?? '').toString().trim();
+      if (defUrl.startsWith('http')) return {'url': defUrl, 'label': '$targetServer (Default)'};
+      return null;
     } catch (_) {
       return null;
     }
   }
 
-  Future<void> initVideo({bool autoFallback = true}) async {
+  Future<void> initVideo() async {
     final int token = ++loadToken;
     final String title = (widget.item['title'] ?? 'Anime').toString();
 
     setState(() {
       ready = false;
-      statusMsg = 'Memuat stream $title Ep ${widget.ep} ($server)...';
+      useWebView = false;
+      statusMsg = 'Memuat $server ($quality) • $title Ep $currentEp...';
     });
 
-    if (streamApiBase == 'MASUKKAN_API_DISINI' || streamApiBase.trim().isEmpty) {
-      if (!mounted || token != loadToken) return;
+    final result = await _fetchStream(server, token);
+    if (!mounted || token != loadToken) return;
+
+    if (result == null || (result['url'] ?? '').isEmpty) {
       setState(() {
-        statusMsg = 'API Stream belum terhubung (Ep ${widget.ep} • $quality • $server)';
+        statusMsg = 'Stream tidak tersedia pada $server (Ep $currentEp • $quality)';
       });
       return;
     }
 
-    final startIdx = servers.indexOf(server).clamp(0, servers.length - 1);
-    final candidateServers = autoFallback
-        ? [
-            servers[startIdx],
-            for (int i = 0; i < servers.length; i++)
-              if (i != startIdx) servers[i],
-          ]
-        : [servers[startIdx]];
+    final chosenUrl = result['url']!;
+    final chosenLabel = result['label'] ?? server;
 
-    String? chosenUrl;
-    String activeServer = server;
-
-    for (final srv in candidateServers) {
+    if (!_isDirectVideo(chosenUrl)) {
+      await vp?.dispose();
+      vp = null;
+      final wc = WebViewController()
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setBackgroundColor(Colors.black)
+        ..loadRequest(Uri.parse(chosenUrl));
       if (!mounted || token != loadToken) return;
       setState(() {
-        statusMsg = 'Mencoba $srv • Ep ${widget.ep} ($quality)...';
-      });
-      final url = await _fetchStreamUrlForServer(srv, token);
-      if (!mounted || token != loadToken) return;
-      if (url != null && url.isNotEmpty) {
-        chosenUrl = url;
-        activeServer = srv;
-        break;
-      }
-    }
-
-    if (!mounted || token != loadToken) return;
-
-    if (chosenUrl == null || chosenUrl.isEmpty) {
-      setState(() {
-        statusMsg = 'Stream tidak tersedia pada 4 server (Ep ${widget.ep} • $quality)';
+        webCtrl = wc;
+        useWebView = true;
+        serverLabel = chosenLabel;
+        ready = true;
       });
       return;
     }
 
     final oldController = vp;
     final newController = VideoPlayerController.networkUrl(Uri.parse(chosenUrl));
-
     try {
       await newController.initialize();
       if (!mounted || token != loadToken) {
         await newController.dispose();
         return;
       }
-
       await oldController?.dispose();
       vp = newController;
+      webCtrl = null;
+      useWebView = false;
       await vp!.setVolume(vol);
       await vp!.setPlaybackSpeed(speed);
       await vp!.play();
@@ -862,52 +878,61 @@ class _PlayerPageState extends State<PlayerPage> {
       vp!.addListener(() {
         if (!mounted || token != loadToken || vp == null) return;
         final val = vp!.value;
-        if (ready &&
-            autonext &&
-            !isNavigatingEp &&
-            val.duration > Duration.zero &&
-            val.position >= val.duration) {
+        if (ready && autonext && !isNavigatingEp && val.duration > Duration.zero && val.position >= val.duration) {
           final maxEp = (widget.item['episodes'] is int) ? widget.item['episodes'] as int : 12;
-          if (widget.ep < maxEp) {
+          if (currentEp < maxEp) {
             isNavigatingEp = true;
-            _goToEpisode(widget.ep + 1);
+            _switchEpisode(currentEp + 1);
           }
         }
         if (mounted) setState(() {});
       });
 
       setState(() {
-        server = activeServer;
+        serverLabel = chosenLabel;
         ready = true;
       });
     } catch (_) {
       await newController.dispose();
       if (!mounted || token != loadToken) return;
+      final wc = WebViewController()
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setBackgroundColor(Colors.black)
+        ..loadRequest(Uri.parse(chosenUrl));
       setState(() {
-        ready = false;
-        statusMsg = 'Gagal memutar video dari $activeServer (Ep ${widget.ep})';
+        webCtrl = wc;
+        useWebView = true;
+        serverLabel = chosenLabel;
+        ready = true;
       });
     }
   }
 
-  Future<void> _goToEpisode(int nextEp) async {
-    if (!mounted) return;
+  Future<void> _switchEpisode(int nextEp) async {
+    if (!mounted || nextEp == currentEp) return;
     await vp?.pause();
-    await Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => PlayerPage(item: widget.item, ep: nextEp),
-      ),
-    );
+    final p = await SharedPreferences.getInstance();
+    await p.setInt('exp', (p.getInt('exp') ?? 0) + 25);
+    final hist = p.getStringList('history') ?? [];
+    hist.removeWhere((e) => jsonDecode(e)['title'] == widget.item['title']);
+    final entry = Map<String, dynamic>.from(widget.item)..['lastEp'] = nextEp;
+    hist.insert(0, jsonEncode(entry));
+    await p.setStringList('history', hist.take(40).toList());
+    if (!mounted) return;
+    setState(() {
+      currentEp = nextEp;
+      isNavigatingEp = false;
+      userExp += 25;
+    });
+    await loadComments();
+    await initVideo();
   }
 
   Future<void> _seekBy(int seconds) async {
-    if (vp == null || !ready) return;
+    if (vp == null || !ready || useWebView) return;
     final dur = vp!.value.duration;
     final target = vp!.value.position + Duration(seconds: seconds);
-    final clamped = target < Duration.zero
-        ? Duration.zero
-        : (target > dur ? dur : target);
+    final clamped = target < Duration.zero ? Duration.zero : (target > dur ? dur : target);
     await vp!.seekTo(clamped);
   }
 
@@ -915,343 +940,10 @@ class _PlayerPageState extends State<PlayerPage> {
     final next = !fullscreen;
     setState(() => fullscreen = next);
     if (next) {
-      await SystemChrome.setPreferredOrientations([
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
-      ]);
+      await SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     } else {
       await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     }
   }
-
-  @override
-  Widget build(BuildContext context) {
-    final title = (widget.item['title'] ?? 'Anime').toString();
-    final maxEp = (widget.item['episodes'] is int) ? widget.item['episodes'] as int : 12;
-    final pos = vp?.value.position ?? Duration.zero;
-    final dur = vp?.value.duration ?? Duration.zero;
-    final isPlaying = vp?.value.isPlaying ?? false;
-
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        top: !fullscreen,
-        bottom: !fullscreen,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () {
-            setState(() => showCtrl = !showCtrl);
-          },
-          onVerticalDragUpdate: locked
-              ? null
-              : (details) {
-                  final width = MediaQuery.of(context).size.width;
-                  final delta = -(details.primaryDelta ?? 0) / 220.0;
-                  if (details.globalPosition.dx < width * 0.45) {
-                    setState(() => bright = (bright + delta).clamp(0.15, 1.0));
-                  } else if (details.globalPosition.dx > width * 0.55) {
-                    final nextVol = (vol + delta).clamp(0.0, 1.0);
-                    setState(() => vol = nextVol);
-                    vp?.setVolume(nextVol);
-                  }
-                },
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Center(
-                child: ready && vp != null
-                    ? AspectRatio(
-                        aspectRatio: vp!.value.aspectRatio > 0
-                            ? vp!.value.aspectRatio
-                            : 16 / 9,
-                        child: VideoPlayer(vp!),
-                      )
-                    : Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const CircularProgressIndicator(color: Color(0xFF38BDF8)),
-                            const SizedBox(height: 14),
-                            Text(
-                              statusMsg,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(color: Colors.white70, fontSize: 13),
-                            ),
-                          ],
-                        ),
-                      ),
-              ),
-              IgnorePointer(
-                child: Container(
-                  color: Colors.black.withOpacity((1.0 - bright) * 0.75),
-                ),
-              ),
-              if (showCtrl)
-                Positioned(
-                  top: 12,
-                  right: 12,
-                  child: IconButton(
-                    icon: Icon(
-                      locked ? Icons.lock : Icons.lock_open,
-                      color: locked ? const Color(0xFFFFBBF24) : Colors.white,
-                    ),
-                    onPressed: () => setState(() => locked = !locked),
-                  ),
-                ),
-              if (showCtrl && !locked) ...[
-                Positioned(
-                  top: 10,
-                  left: 8,
-                  right: 56,
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back, color: Colors.white),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            Text(
-                              'Episode ${widget.ep}',
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Positioned(
-                  left: 10,
-                  top: 80,
-                  bottom: 95,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        '${(bright * 100).round()}%',
-                        style: const TextStyle(color: Colors.white70, fontSize: 11),
-                      ),
-                      Expanded(
-                        child: RotatedBox(
-                          quarterTurns: 3,
-                          child: Slider(
-                            value: bright,
-                            min: 0.15,
-                            max: 1.0,
-                            activeColor: Colors.white,
-                            inactiveColor: Colors.white24,
-                            onChanged: (v) => setState(() => bright = v),
-                          ),
-                        ),
-                      ),
-                      const Icon(Icons.wb_sunny, color: Colors.white70, size: 16),
-                    ],
-                  ),
-                ),
-                Positioned(
-                  right: 10,
-                  top: 80,
-                  bottom: 95,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        '${(vol * 100).round()}%',
-                        style: const TextStyle(color: Colors.white70, fontSize: 11),
-                      ),
-                      Expanded(
-                        child: RotatedBox(
-                          quarterTurns: 3,
-                          child: Slider(
-                            value: vol,
-                            min: 0.0,
-                            max: 1.0,
-                            activeColor: Colors.white,
-                            inactiveColor: Colors.white24,
-                            onChanged: (v) {
-                              setState(() => vol = v);
-                              vp?.setVolume(v);
-                            },
-                          ),
-                        ),
-                      ),
-                      Icon(
-                        vol == 0 ? Icons.volume_off : Icons.volume_up,
-                        color: Colors.white70,
-                        size: 16,
-                      ),
-                    ],
-                  ),
-                ),
-                Center(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      IconButton(
-                        iconSize: 34,
-                        icon: const Icon(Icons.replay_10, color: Colors.white),
-                        onPressed: () => _seekBy(-10),
-                      ),
-                      const SizedBox(width: 18),
-                      IconButton(
-                        iconSize: 52,
-                        icon: Icon(
-                          isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
-                          color: Colors.white,
-                        ),
-                        onPressed: () async {
-                          if (!ready || vp == null) return;
-                          if (isPlaying) {
-                            await vp!.pause();
-                          } else {
-                            await vp!.play();
-                          }
-                          if (mounted) setState(() {});
-                        },
-                      ),
-                      const SizedBox(width: 18),
-                      IconButton(
-                        iconSize: 34,
-                        icon: const Icon(Icons.forward_10, color: Colors.white),
-                        onPressed: () => _seekBy(10),
-                      ),
-                      if (widget.ep < maxEp) ...[
-                        const SizedBox(width: 14),
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              iconSize: 34,
-                              icon: const Icon(Icons.skip_next, color: Colors.white),
-                              onPressed: () => _goToEpisode(widget.ep + 1),
-                            ),
-                            Text(
-                              'Episode ${widget.ep + 1}',
-                              style: const TextStyle(color: Colors.white70, fontSize: 11),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                Positioned(
-                  left: 12,
-                  right: 12,
-                  bottom: 8,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (ready && vp != null)
-                        VideoProgressIndicator(
-                          vp!,
-                          allowScrubbing: true,
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          colors: VideoProgressColors(
-                            playedColor: Color(0xFFEF4444),
-                            bufferedColor: Colors.white38,
-                            backgroundColor: Colors.white12,
-                          ),
-                        ),
-                      Row(
-                        children: [
-                          Text(
-                            '${_fmtDuration(pos)} / ${_fmtDuration(dur)}',
-                            style: const TextStyle(color: Colors.white, fontSize: 12),
-                          ),
-                          const Spacer(),
-                          DropdownButton<String>(
-                            value: server,
-                            dropdownColor: const Color(0xFF0F172A),
-                            underline: const SizedBox(),
-                            style: const TextStyle(color: Colors.white, fontSize: 12),
-                            items: servers
-                                .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                                .toList(),
-                            onChanged: (val) {
-                              if (val == null) return;
-                              setState(() => server = val);
-                              initVideo(autoFallback: true);
-                            },
-                          ),
-                          const SizedBox(width: 6),
-                          GestureDetector(
-                            onTap: () => setState(() => autonext = !autonext),
-                            child: Text(
-                              'Autonext',
-                              style: TextStyle(
-                                color: autonext ? const Color(0xFF38BDF8) : Colors.white54,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          DropdownButton<String>(
-                            value: quality,
-                            dropdownColor: const Color(0xFF0F172A),
-                            underline: const SizedBox(),
-                            style: const TextStyle(color: Colors.white, fontSize: 12),
-                            items: qualities
-                                .map((q) => DropdownMenuItem(value: q, child: Text(q)))
-                                .toList(),
-                            onChanged: (val) {
-                              if (val == null) return;
-                              setState(() => quality = val);
-                              initVideo(autoFallback: true);
-                            },
-                          ),
-                          const SizedBox(width: 6),
-                          DropdownButton<double>(
-                            value: speed,
-                            dropdownColor: const Color(0xFF0F172A),
-                            underline: const SizedBox(),
-                            style: const TextStyle(color: Colors.white, fontSize: 12),
-                            items: speeds
-                                .map((sp) => DropdownMenuItem(value: sp, child: Text('${sp}x')))
-                                .toList(),
-                            onChanged: (val) {
-                              if (val == null) return;
-                              setState(() => speed = val);
-                              vp?.setPlaybackSpeed(val);
-                            },
-                          ),
-                          IconButton(
-                            icon: Icon(
-                              fullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
-                              color: Colors.white,
-                            ),
-                            onPressed: _toggleFullscreen,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}

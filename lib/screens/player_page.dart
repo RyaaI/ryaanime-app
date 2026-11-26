@@ -236,7 +236,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
           _videoCtrl = ctrl;
           _useWebView = false;
           _loading = false;
-          _statusMsg = label;
+          _statusMsg = 'Server ${_serverIdx + 1}';
         });
         _startWatchTracker();
         return;
@@ -269,7 +269,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
             if (!mounted || token != _loadToken) return;
             setState(() {
               _loading = false;
-              _statusMsg = label;
+              _statusMsg = 'Server ${_serverIdx + 1}';
             });
             _startWatchTracker();
           },
@@ -282,7 +282,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
       _webCtrl = wv;
       _useWebView = true;
       _loading = false;
-      _statusMsg = label;
+      _statusMsg = 'Server ${_serverIdx + 1}';
     });
     _startWatchTracker();
   }

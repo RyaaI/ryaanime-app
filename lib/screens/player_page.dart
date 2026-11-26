@@ -301,13 +301,13 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
         DeviceOrientation.landscapeLeft,
         DeviceOrientation.landscapeRight,
       ]);
-      await Future.delayed(const Duration(milliseconds: 120));
+      await Future.delayed(const Duration(milliseconds: 50));
       if (mounted) {
         await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
       }
     } else {
       await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-      await Future.delayed(const Duration(milliseconds: 120));
+      await Future.delayed(const Duration(milliseconds: 50));
       if (mounted) {
         await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
       }

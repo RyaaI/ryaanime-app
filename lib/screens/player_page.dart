@@ -445,22 +445,28 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
       child: Stack(
         alignment: Alignment.center,
         children: [
-          if (_videoCtrl != null && _videoCtrl!.value.isInitialized)
-            AspectRatio(
-              aspectRatio: _videoCtrl!.value.aspectRatio,
-              child: VideoPlayer(_videoCtrl!),
-            )
-          else if (_useWebView && _webCtrl != null)
-            WebViewWidget(controller: _webCtrl!)
-          else
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                _statusMsg,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white70, fontSize: 13),
+          Positioned.fill(
+            child: IgnorePointer(
+              ignoring: _locked,
+              child: Center(
+                child: (_videoCtrl != null && _videoCtrl!.value.isInitialized)
+                    ? AspectRatio(
+                        aspectRatio: _videoCtrl!.value.aspectRatio,
+                        child: VideoPlayer(_videoCtrl!),
+                      )
+                    : ((_useWebView && _webCtrl != null)
+                        ? WebViewWidget(controller: _webCtrl!)
+                        : Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Text(
+                              _statusMsg,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.white70, fontSize: 13),
+                            ),
+                          )),
               ),
             ),
+          ),
           if (_loading)
             const CircularProgressIndicator(color: Color(0xFF38BDF8)),
           if (!_locked)
@@ -521,7 +527,10 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
     );
 
     if (_isFullscreen) {
-      return Scaffold(backgroundColor: Colors.black, body: playerBox);
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: SafeArea(child: playerBox),
+      );
     }
 
     return Scaffold(

@@ -890,6 +890,23 @@ class _ProfileModalState extends State<_ProfileModal> {
     setState(() => _avatar = destPath);
   }
 
+  int _requiredLevelForKey(String key) {
+    if (key.contains('nihility') || key.contains('turnnull')) return 40;
+    if (key.contains('divinity') || key.contains('sovereign')) return 25;
+    if (key.contains('octagram') || key.contains('throne')) return 15;
+    if (key.contains('frost') || key.contains('storm')) return 10;
+    if (key.contains('sage') || key.contains('matrix')) return 6;
+    if (key.contains('kijin') || key.contains('ember')) return 3;
+    return 1;
+  }
+
+  bool _isCosmeticUnlocked(String key) {
+    if (_owner) return true;
+    if (key == 'b_owner' || key == 'bg_owner') return false;
+    final lvl = (_exp ~/ 100) + 1;
+    return lvl >= _requiredLevelForKey(key);
+  }
+
   Future<void> _selectBorder(String id) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('active_border', id);

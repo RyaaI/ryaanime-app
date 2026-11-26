@@ -1,4 +1,5 @@
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -622,6 +623,7 @@ class _DetailPageState extends State<DetailPage> {
   }
 }
 
+
 class PlayerPage extends StatefulWidget {
   final Map<String, dynamic> item;
   final int ep;
@@ -947,3 +949,234 @@ class _PlayerPageState extends State<PlayerPage> {
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     }
   }
+
+  Widget _buildPlayerBox(String title, int maxEp) {
+    final pos = vp?.value.position ?? Duration.zero;
+    final dur = vp?.value.duration ?? Duration.zero;
+    final isPlaying = vp?.value.isPlaying ?? false;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => setState(() => showCtrl = !showCtrl),
+      onVerticalDragUpdate: locked ? null : (details) {
+        final width = MediaQuery.of(context).size.width;
+        final delta = -(details.primaryDelta ?? 0) / 220.0;
+        if (details.globalPosition.dx < width * 0.45) {
+          setState(() => bright = (bright + delta).clamp(0.15, 1.0));
+        } else if (details.globalPosition.dx > width * 0.55) {
+          final nextVol = (vol + delta).clamp(0.0, 1.0);
+          setState(() => vol = nextVol);
+          vp?.setVolume(nextVol);
+        }
+      },
+      child: Container(
+        color: Colors.black,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Center(
+              child: ready
+                  ? (useWebView && webCtrl != null
+                      ? WebViewWidget(controller: webCtrl!)
+                      : (vp != null ? AspectRatio(aspectRatio: vp!.value.aspectRatio > 0 ? vp!.value.aspectRatio : 16 / 9, child: VideoPlayer(vp!)) : const SizedBox()))
+                  : Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const CircularProgressIndicator(color: Color(0xFF38BDF8)),
+                          const SizedBox(height: 10),
+                          Text(statusMsg, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                        ],
+                      ),
+                    ),
+            ),
+            IgnorePointer(child: Container(color: Colors.black.withOpacity((1.0 - bright) * 0.75))),
+            if (showCtrl)
+              Positioned(
+                top: 4, right: 4,
+                child: IconButton(
+                  icon: Icon(locked ? Icons.lock : Icons.lock_open, color: locked ? const Color(0xFFFBBF24) : Colors.white, size: 20),
+                  onPressed: () => setState(() => locked = !locked),
+                ),
+              ),
+
+            if (showCtrl && !locked) ...[
+              Positioned(
+                top: 4, left: 4, right: 48,
+                child: Row(
+                  children: [
+                    IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white, size: 20), onPressed: () => fullscreen ? _toggleFullscreen() : Navigator.pop(context)),
+                    Expanded(child: Text('$title • Ep $currentEp ($quality)', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600))),
+                  ],
+                ),
+              ),
+              if (ready && !useWebView)
+                Center(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(iconSize: 28, icon: const Icon(Icons.replay_10, color: Colors.white), onPressed: () => _seekBy(-10)),
+                      const SizedBox(width: 12),
+                      IconButton(iconSize: 42, icon: Icon(isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled, color: const Color(0xFF38BDF8)), onPressed: () async { if (vp == null) return; isPlaying ? await vp!.pause() : await vp!.play(); if (mounted) setState(() {}); }),
+                      const SizedBox(width: 12),
+                      IconButton(iconSize: 28, icon: const Icon(Icons.forward_10, color: Colors.white), onPressed: () => _seekBy(10)),
+                    ],
+                  ),
+                ),
+              Positioned(
+                left: 8, right: 8, bottom: 2,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (ready && !useWebView && vp != null)
+                      VideoProgressIndicator(vp!, allowScrubbing: true, padding: const EdgeInsets.symmetric(vertical: 2), colors: VideoProgressColors(playedColor: const Color(0xFF38BDF8), bufferedColor: Colors.white38, backgroundColor: Colors.white12)),
+                    Row(
+                      children: [
+                        Text(useWebView ? serverLabel : '${_fmtDuration(pos)} / ${_fmtDuration(dur)}', style: TextStyle(color: useWebView ? const Color(0xFF38BDF8) : Colors.white, fontSize: 11)),
+                        const Spacer(),
+                        DropdownButton<String>(value: server, isDense: true, dropdownColor: const Color(0xFF0F172A), underline: const SizedBox(), style: const TextStyle(color: Colors.white, fontSize: 11), items: servers.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(), onChanged: (val) { if (val != null) { setState(() => server = val); initVideo(); } }),
+                        const SizedBox(width: 6),
+                        GestureDetector(onTap: () => setState(() => autonext = !autonext), child: Text('Autonext', style: TextStyle(color: autonext ? const Color(0xFF38BDF8) : Colors.white54, fontSize: 11, fontWeight: FontWeight.w600))),
+                        const SizedBox(width: 6),
+                        DropdownButton<String>(value: quality, isDense: true, dropdownColor: const Color(0xFF0F172A), underline: const SizedBox(), style: const TextStyle(color: Color(0xFFFBBF24), fontSize: 11, fontWeight: FontWeight.bold), items: qualities.map((q) => DropdownMenuItem(value: q, child: Text(q))).toList(), onChanged: (val) { if (val != null) { setState(() => quality = val); initVideo(); } }),
+                        if (!useWebView) ...[
+                          const SizedBox(width: 4),
+                          DropdownButton<double>(value: speed, isDense: true, dropdownColor: const Color(0xFF0F172A), underline: const SizedBox(), style: const TextStyle(color: Colors.white, fontSize: 11), items: speeds.map((sp) => DropdownMenuItem(value: sp, child: Text('${sp}x'))).toList(), onChanged: (val) { if (val != null) { setState(() => speed = val); vp?.setPlaybackSpeed(val); } }),
+                        ],
+                        IconButton(padding: EdgeInsets.zero, constraints: const BoxConstraints(), icon: Icon(fullscreen ? Icons.fullscreen_exit : Icons.fullscreen, color: Colors.white, size: 20), onPressed: _toggleFullscreen),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final title = (widget.item['title'] ?? 'Anime').toString();
+    final int maxEp = (widget.item['episodes'] is int && widget.item['episodes'] > 0) ? widget.item['episodes'] : 12;
+    final totalBoxes = maxEp > 50 ? 50 : maxEp;
+
+    if (fullscreen) {
+      return Scaffold(backgroundColor: Colors.black, body: _buildPlayerBox(title, maxEp));
+    }
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF0B1120),
+      body: SafeArea(
+        child: Column(
+          children: [
+            AspectRatio(aspectRatio: 16 / 9, child: _buildPlayerBox(title, maxEp)),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.all(12),
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white))),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(color: const Color(0xFF0F172A), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFF38BDF8))),
+                        child: Text('Ep $currentEp • $quality', style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 11, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  const Text('Episode', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFFFBBF24))),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 44,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: totalBoxes,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (ctx, i) {
+                        final epNum = i + 1;
+                        final active = epNum == currentEp;
+                        return GestureDetector(
+                          onTap: () => _switchEpisode(epNum),
+                          child: Container(
+                            width: 46,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: active ? const Color(0xFF38BDF8) : const Color(0xFF0F172A),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: active ? const Color(0xFF38BDF8) : const Color(0xFF1E3A5F)),
+                            ),
+                            child: Text('$epNum', style: TextStyle(fontWeight: FontWeight.bold, color: active ? const Color(0xFF0B1120) : Colors.white)),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: const Color(0xFF0F172A), borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFF1E3A5F))),
+                    child: const Text('Jaga ketertiban Federasi Jura Tempest. Berkomentarlah dengan sopan sesama warga Tempest.', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                  ),
+                  const SizedBox(height: 14),
+                  Text('${comments.length} Komentar Tempest', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF38BDF8))),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      CircleAvatar(radius: 18, backgroundColor: const Color(0xFF38BDF8), backgroundImage: userAvatar.startsWith('http') ? NetworkImage(userAvatar) : null, child: !userAvatar.startsWith('http') ? const Icon(Icons.water_drop, size: 18, color: Color(0xFF0B1120)) : null),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: commentCtrl,
+                          style: const TextStyle(fontSize: 13),
+                          decoration: InputDecoration(
+                            hintText: 'Tambahkan komentar...',
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            filled: true,
+                            fillColor: const Color(0xFF0F172A),
+                            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: const BorderSide(color: Color(0xFF1E3A5F))),
+                            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: const BorderSide(color: Color(0xFF38BDF8))),
+                          ),
+                        ),
+                      ),
+                      IconButton(icon: const Icon(Icons.send_rounded, color: Color(0xFF38BDF8)), onPressed: postComment),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  ...comments.map((c) {
+                    final isOwn = c['isOwner'] == true;
+                    final av = (c['avatar'] ?? '').toString();
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(color: const Color(0xFF0F172A), borderRadius: BorderRadius.circular(10), border: Border.all(color: isOwn ? const Color(0xFFFBBF24) : const Color(0xFF1E3A5F))),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              CircleAvatar(radius: 14, backgroundColor: const Color(0xFF38BDF8), backgroundImage: av.startsWith('http') ? NetworkImage(av) : null, child: !av.startsWith('http') ? const Icon(Icons.water_drop, size: 14, color: Color(0xFF0B1120)) : null),
+                              const SizedBox(width: 8),
+                              Expanded(child: Text('${c['name']} • Lvl. ${c['lvl']} ${c['title']}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isOwn ? const Color(0xFFFBBF24) : const Color(0xFF38BDF8)))),
+                              Text(c['time'] ?? '', style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(c['text'] ?? '', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

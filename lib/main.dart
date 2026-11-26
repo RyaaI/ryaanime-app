@@ -1775,7 +1775,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
                         )),
                           ],
                         ))),
-                        },
-                          const SizedBox(width: 6),
-                        }
-                        ]]
+}
+}
+]
+]

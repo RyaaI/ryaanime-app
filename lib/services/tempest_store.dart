@@ -173,7 +173,7 @@ class AniService {
         )
         .timeout(const Duration(seconds: 15));
     final list = jsonDecode(res.body)['data']?['Page']?['media'] as List? ?? [];
-    return list.map>((m) {
+    return list.map<Map<String, dynamic>>((m) {
       return {
         'id': m['id'] ?? 0,
         'title': m['title']?['romaji'] ?? m['title']?['english'] ?? 'Anime',
@@ -200,7 +200,7 @@ class SessionManager {
   static String _passHash(String raw) =>
       sha256.convert(utf8.encode(raw.trim())).toString();
 
-  static Future> _loadUsers(
+  static Future<Map<String, dynamic>> _loadUsers(
       SharedPreferences prefs) async {
     final raw = prefs.getString(_usersKey);
     if (raw == null || raw.isEmpty) return {};
@@ -292,7 +292,7 @@ class SessionManager {
   static Future<void> persistActiveProfile() async {
     final prefs = await SharedPreferences.getInstance();
     final key = prefs.getString(_activeUserKey);
-    if (key == null || key.isEmpty) return;
+    if (key == null || key.isEmpty) return null;
     final users = await _loadUsers(prefs);
     final rec = (users[key] is Map<String, dynamic>)
         ? Map<String, dynamic>.from(users[key] as Map)

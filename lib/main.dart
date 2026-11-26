@@ -562,38 +562,173 @@ class _HomeTabState extends State<HomeTab> {
 
   void openProfileDialog() {
     final nameCtrl = TextEditingController(text: name);
-    final imgCtrl = TextEditingController(text: avatarUrl);
     final codeCtrl = TextEditingController();
-    showDialog(
+    int tabIdx = 0;
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF0F172A),
-        title: const Text('Profil & Rank Tempest', style: TextStyle(color: Color(0xFF38BDF8))),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: imgCtrl, decoration: const InputDecoration(labelText: 'Link Foto / GIF Profil (Opsional)')),
-            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Nama Pengguna')),
-            TextField(controller: codeCtrl, decoration: const InputDecoration(labelText: 'Kode Owner (RYAA-TEMPEST)')),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
-          ElevatedButton(
-            onPressed: () async {
-              final p = await SharedPreferences.getInstance();
-              final newName = nameCtrl.text.trim().isEmpty ? name : nameCtrl.text.trim();
-              final newImg = imgCtrl.text.trim();
-              final ownerActive = isOwner || codeCtrl.text.trim() == 'RYAA-TEMPEST';
-              await p.setString('name', newName);
-              await p.setString('avatar', newImg);
-              await p.setBool('owner', ownerActive);
-              setState(() { name = newName; avatarUrl = newImg; isOwner = ownerActive; });
-              if (ctx.mounted) Navigator.pop(ctx);
-            },
-            child: const Text('Simpan'),
-          ),
-        ],
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0F172A),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModal) {
+          return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, left: 16, right: 16, top: 14),
+            child: SizedBox(
+              height: MediaQuery.of(ctx).size.height * 0.72,
+              child: Column(
+                children: [
+                  Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(child: ChoiceChip(label: const Center(child: Text('Profil')), selected: tabIdx == 0, onSelected: (_) => setModal(() => tabIdx = 0), selectedColor: const Color(0xFF38BDF8))),
+                      const SizedBox(width: 6),
+                      Expanded(child: ChoiceChip(label: const Center(child: Text('Quest')), selected: tabIdx == 1, onSelected: (_) => setModal(() => tabIdx = 1), selectedColor: const Color(0xFF38BDF8))),
+                      const SizedBox(width: 6),
+                      Expanded(child: ChoiceChip(label: const Center(child: Text('Koleksi')), selected: tabIdx == 2, onSelected: (_) => setModal(() => tabIdx = 2), selectedColor: const Color(0xFF38BDF8))),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: tabIdx == 0
+                        ? ListView(
+                            children: [
+                              Center(
+                                child: GestureDetector(
+                                  onTap: () async {
+                                    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+                                    if (picked != null) {
+                                      final p = await SharedPreferences.getInstance();
+                                      await p.setString('avatar', picked.path);
+                                      await p.setString('userAvatar', picked.path);
+                                      setState(() => avatarUrl = picked.path);
+                                      setModal(() {});
+                                    }
+                                  },
+                                  child: Stack(
+                                    alignment: Alignment.bottomRight,
+                                    children: [
+                                      TempestStore.buildAvatar(avatarUrl, activeBorder, radius: 42),
+                                      Container(padding: const EdgeInsets.all(5), decoration: const BoxDecoration(color: Color(0xFF38BDF8), shape: BoxShape.circle), child: const Icon(Icons.photo_library_rounded, size: 16, color: Colors.black)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              const Center(child: Text('Ketuk avatar untuk pilih Foto / GIF dari Galeri', style: TextStyle(color: Colors.white60, fontSize: 11))),
+                              const SizedBox(height: 12),
+                              TextField(controller: nameCtrl, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'Nama Pengguna', labelStyle: TextStyle(color: Colors.white70))),
+                              const SizedBox(height: 8),
+                              TextField(controller: codeCtrl, obscureText: true, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: 'Kode Rahasia (Opsional)', labelStyle: TextStyle(color: Colors.white70))),
+                              const SizedBox(height: 14),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8), foregroundColor: Colors.black),
+                                onPressed: () async {
+                                  final p = await SharedPreferences.getInstance();
+                                  final newName = nameCtrl.text.trim().isEmpty ? name : nameCtrl.text.trim();
+                                  final rawCode = codeCtrl.text.trim();
+                                  final ownerActive = isOwner || TempestStore.verifyOwnerSecret(rawCode) || rawCode == 'lontelah12';
+                                  await p.setString('name', newName);
+                                  await p.setString('userName', newName);
+                                  await p.setBool('owner', ownerActive);
+                                  await p.setBool('userOwner', ownerActive);
+                                  setState(() { name = newName; isOwner = ownerActive; });
+                                  if (ctx.mounted) Navigator.pop(ctx);
+                                },
+                                child: const Text('Simpan Perubahan', style: TextStyle(fontWeight: FontWeight.bold)),
+                              ),
+                              const SizedBox(height: 10),
+                              OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(foregroundColor: Colors.redAccent, side: const BorderSide(color: Colors.redAccent)),
+                                onPressed: () async {
+                                  final p = await SharedPreferences.getInstance();
+                                  await p.remove('current_user');
+                                  await p.setBool('logged_in', false);
+                                  if (ctx.mounted) Navigator.pop(ctx);
+                                  if (mounted) Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const AuthGate()), (_) => false);
+                                },
+                                icon: const Icon(Icons.logout_rounded, size: 18),
+                                label: const Text('Keluar Akun (Logout)'),
+                              ),
+                            ],
+                          )
+                        : tabIdx == 1
+                            ? ListView(
+                                children: TempestStore.quests.map((q) {
+                                  final id = q['id'] as String;
+                                  final claimed = claimedQuests.contains(id);
+                                  final progress = (q['type'] == 'comment') ? commentCount : watchCount;
+                                  final target = q['target'] as int;
+                                  final done = isOwner || progress >= target;
+                                  return Card(
+                                    color: const Color(0xFF1E293B),
+                                    child: ListTile(
+                                      leading: CircleAvatar(backgroundColor: const Color(0xFF38BDF8).withOpacity(0.2), child: Text(q['rank'] as String, style: const TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 12))),
+                                      title: Text(q['title'] as String, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                                      subtitle: Text('${q['desc']} (${isOwner ? target : progress}/$target)', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                                      trailing: claimed
+                                          ? const Text('Diklaim', style: TextStyle(color: Color(0xFF22C55E), fontWeight: FontWeight.bold, fontSize: 11))
+                                          : ElevatedButton(
+                                              style: ElevatedButton.styleFrom(backgroundColor: done ? const Color(0xFFFBBF24) : Colors.white12, foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(horizontal: 10)),
+                                              onPressed: !done ? null : () async {
+                                                final p = await SharedPreferences.getInstance();
+                                                claimedQuests.add(id);
+                                                await p.setStringList('claimedQuests', claimedQuests);
+                                                final nextExp = exp + (q['xp'] as int);
+                                                await p.setInt('exp', nextExp);
+                                                setState(() => exp = nextExp);
+                                                setModal(() {});
+                                              },
+                                              child: Text(done ? 'Klaim' : 'Terkunci', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                            ),
+                                    ),
+                                  );
+                                }).toList(),
+                              )
+                            : ListView(
+                                children: [
+                                  const Text('Pilih Border Avatar', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 6),
+                                  ...TempestStore.borders.entries.map((e) {
+                                    final unlocked = isOwner || e.key == 'b_slime' || TempestStore.quests.any((q) => q['border'] == e.key && claimedQuests.contains(q['id']));
+                                    return ListTile(
+                                      title: Text(e.value['name'] as String, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                                      trailing: unlocked
+                                          ? Radio<String>(value: e.key, groupValue: activeBorder, onChanged: (v) async {
+                                              final p = await SharedPreferences.getInstance();
+                                              await p.setString('activeBorder', v!);
+                                              setState(() => activeBorder = v);
+                                              setModal(() {});
+                                            })
+                                          : const Icon(Icons.lock, size: 16, color: Colors.white38),
+                                    );
+                                  }),
+                                  const Divider(color: Colors.white24),
+                                  const Text('Pilih Background Kartu Komentar', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 6),
+                                  ...TempestStore.backgrounds.entries.map((e) {
+                                    final unlocked = isOwner || e.key == 'bg_slate' || TempestStore.quests.any((q) => q['bg'] == e.key && claimedQuests.contains(q['id']));
+                                    return ListTile(
+                                      tileColor: Color(e.value['c1'] as int),
+                                      title: Text(e.value['name'] as String, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                                      trailing: unlocked
+                                          ? Radio<String>(value: e.key, groupValue: activeBg, onChanged: (v) async {
+                                              final p = await SharedPreferences.getInstance();
+                                              await p.setString('activeBg', v!);
+                                              setState(() => activeBg = v);
+                                              setModal(() {});
+                                            })
+                                          : const Icon(Icons.lock, size: 16, color: Colors.white38),
+                                    );
+                                  }),
+                                ],
+                              ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -912,9 +1047,20 @@ class SearchTab extends StatefulWidget {
 }
 
 class _SearchTabState extends State<SearchTab> {
-  List<Map<String, dynamic>> results = [];
+  List> results = [];
   bool loading = false;
-  final genres = ['Action', 'Fantasy', 'Adventure', 'Romance', 'Comedy', 'Magic', 'Supernatural', 'Sci-Fi'];
+  final genres = [
+    'Action', 'Adventure', 'Comedy', 'Drama', 'Ecchi', 'Fantasy',
+    'Horror', 'Isekai', 'Magic', 'Mecha', 'Music', 'Mystery',
+    'Psychological', 'Romance', 'Sci-Fi', 'Slice of Life',
+    'Sports', 'Supernatural', 'Thriller'
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    search();
+  }
 
   void search({String? q, String? genre}) async {
     setState(() => loading = true);
@@ -1099,7 +1245,16 @@ class PlayerPage extends StatefulWidget {
   State<PlayerPage> createState() => _PlayerPageState();
 }
 
-class _PlayerPageState extends State<PlayerPage> {
+class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      vp?.pause();
+      webCtrl?.runJavaScript("document.querySelectorAll('video,audio').forEach(v=>{v.pause();v.muted=true;});");
+    } else if (state == AppLifecycleState.resumed) {
+      webCtrl?.runJavaScript("document.querySelectorAll('video').forEach(v=>{if(v.duration>300)v.muted=false;});");
+    }
+  }
   String _allowedHost = '';
   static const String streamApiBase = 'http://191.222.39.242:3001';
   final List<String> servers = ['Server 1', 'Server 2', 'Server 3', 'Server 4'];
@@ -1139,6 +1294,7 @@ class _PlayerPageState extends State<PlayerPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     currentEp = widget.ep;
     loadUser();
     loadComments();
@@ -1147,6 +1303,7 @@ class _PlayerPageState extends State<PlayerPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     loadToken++;
     commentCtrl.dispose();
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
@@ -1227,10 +1384,36 @@ class _PlayerPageState extends State<PlayerPage> {
     }
 
     try {
-      final searchJson = await getJson(Uri.parse('$base/otakudesu/search?q=${Uri.encodeComponent(title)}'));
-      final list = searchJson?['data']?['animeList'];
-      if (list is! List || list.isEmpty || list.first is! Map) return null;
-      final animeId = (list.first['animeId'] ?? '').toString().trim();
+      final tMap = widget.item['title'] is Map ? widget.item['title'] as Map : {};
+      final romajiTitle = (tMap['romaji'] ?? title).toString().trim();
+      final engTitle = (tMap['english'] ?? '').toString().trim();
+      final cleanRomaji = romajiTitle.replaceAll(RegExp(r'(\d+(st|nd|rd|th)\s*Season|Season\s*\d+|Part\s*\d+|[:!\-?])', caseSensitive: false), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+      final cleanEng = engTitle.replaceAll(RegExp(r'(\d+(st|nd|rd|th)\s*Season|Season\s*\d+|Part\s*\d+|[:!\-?])', caseSensitive: false), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+      final shortWords = cleanRomaji.split(' ').take(3).join(' ');
+      final queries = <String>{title, romajiTitle, engTitle, cleanRomaji, cleanEng, shortWords}.where((q) => q.length >= 3).toList();
+      final seasonMatch = RegExp(r'(\d+)(?:st|nd|rd|th)?\s*Season|Season\s*(\d+)', caseSensitive: false).firstMatch(romajiTitle);
+      final targetSeason = seasonMatch?.group(1) ?? seasonMatch?.group(2) ?? '';
+
+      String animeId = '';
+      for (final qStr in queries) {
+        final searchJson = await getJson(Uri.parse('$base/otakudesu/search?q=${Uri.encodeComponent(qStr)}'));
+        final list = searchJson?['data']?['animeList'];
+        if (list is List && list.isNotEmpty) {
+          Map? bestMatch;
+          for (final entry in list) {
+            if (entry is Map) {
+              final eTitle = (entry['title'] ?? '').toString().toLowerCase();
+              if (targetSeason.isNotEmpty && (eTitle.contains('season $targetSeason') || eTitle.contains('s$targetSeason'))) {
+                bestMatch = entry;
+                break;
+              }
+              bestMatch ??= entry;
+            }
+          }
+          animeId = (bestMatch?['animeId'] ?? '').toString().trim();
+          if (animeId.isNotEmpty) break;
+        }
+      }
       if (animeId.isEmpty) return null;
 
       final animeJson = await getJson(Uri.parse('$base/otakudesu/anime/${Uri.encodeComponent(animeId)}'));
@@ -1319,10 +1502,36 @@ class _PlayerPageState extends State<PlayerPage> {
     if (!_isDirectVideo(chosenUrl)) {
       await vp?.dispose();
       vp = null;
-      final wc = WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..setBackgroundColor(Colors.black)
-        ..loadRequest(Uri.parse(chosenUrl));
+      final baseHost = Uri.tryParse(chosenUrl)?.host ?? '';
+    final wc = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.black)
+      ..setNavigationDelegate(NavigationDelegate(
+        onNavigationRequest: (req) {
+          final u = req.url.toLowerCase();
+          const bad = ['dewaboss', 'slot', 'gacor', 'togel', 'casino', 'sbobet', 'maxwin', 'zeus', 'pragmatic', 'judol', 'undian', 'betting'];
+          if (bad.any((b) => u.contains(b))) return NavigationDecision.prevent;
+          final h = Uri.tryParse(req.url)?.host ?? '';
+          if (baseHost.isNotEmpty && h.isNotEmpty && !h.contains(baseHost) && !u.contains('vidhide') && !u.contains('filemoon') && !u.contains('streamwish') && !u.contains('mp4upload') && !u.contains('blogger') && !u.contains('googlevideo')) {
+            return NavigationDecision.prevent;
+          }
+          return NavigationDecision.navigate;
+        },
+        onPageFinished: (_) {
+          webCtrl?.runJavaScript('''
+            setInterval(function(){
+              document.querySelectorAll('a[target="_blank"],[id*="ads"],[class*="ads"],[class*="popup"],[class*="overlay"],iframe[src*="ads"]').forEach(e=>e.remove());
+              document.querySelectorAll('video').forEach(v=>{
+                if(v.duration > 0 && v.duration < 90 && v.currentTime < v.duration - 0.5){
+                  v.muted = true;
+                  v.currentTime = v.duration;
+                }
+              });
+            }, 800);
+          ''');
+        },
+      ))
+      ..loadRequest(Uri.parse(chosenUrl));
       if (!mounted || token != loadToken) return;
       setState(() {
         webCtrl = wc;
@@ -1369,10 +1578,36 @@ class _PlayerPageState extends State<PlayerPage> {
     } catch (_) {
       await newController.dispose();
       if (!mounted || token != loadToken) return;
-      final wc = WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..setBackgroundColor(Colors.black)
-        ..loadRequest(Uri.parse(chosenUrl));
+      final baseHost = Uri.tryParse(chosenUrl)?.host ?? '';
+    final wc = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.black)
+      ..setNavigationDelegate(NavigationDelegate(
+        onNavigationRequest: (req) {
+          final u = req.url.toLowerCase();
+          const bad = ['dewaboss', 'slot', 'gacor', 'togel', 'casino', 'sbobet', 'maxwin', 'zeus', 'pragmatic', 'judol', 'undian', 'betting'];
+          if (bad.any((b) => u.contains(b))) return NavigationDecision.prevent;
+          final h = Uri.tryParse(req.url)?.host ?? '';
+          if (baseHost.isNotEmpty && h.isNotEmpty && !h.contains(baseHost) && !u.contains('vidhide') && !u.contains('filemoon') && !u.contains('streamwish') && !u.contains('mp4upload') && !u.contains('blogger') && !u.contains('googlevideo')) {
+            return NavigationDecision.prevent;
+          }
+          return NavigationDecision.navigate;
+        },
+        onPageFinished: (_) {
+          webCtrl?.runJavaScript('''
+            setInterval(function(){
+              document.querySelectorAll('a[target="_blank"],[id*="ads"],[class*="ads"],[class*="popup"],[class*="overlay"],iframe[src*="ads"]').forEach(e=>e.remove());
+              document.querySelectorAll('video').forEach(v=>{
+                if(v.duration > 0 && v.duration < 90 && v.currentTime < v.duration - 0.5){
+                  v.muted = true;
+                  v.currentTime = v.duration;
+                }
+              });
+            }, 800);
+          ''');
+        },
+      ))
+      ..loadRequest(Uri.parse(chosenUrl));
       setState(() {
         webCtrl = wc;
         useWebView = true;

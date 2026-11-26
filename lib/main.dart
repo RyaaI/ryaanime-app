@@ -1,3 +1,7 @@
+import 'package:url_launcher/url_launcher.dart';
+import 'dart:io';
+import 'package:crypto/crypto.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'dart:convert';
@@ -20,7 +24,94 @@ class RyaaNimeApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xFF0B1120),
         colorScheme: const ColorScheme.dark(primary: Color(0xFF38BDF8), secondary: Color(0xFFFBBF24)),
       ),
-      home: const MainNav(),
+      home: const AuthGate(),
+    );
+  }
+}
+
+
+class TempestStore {
+  static const String ownerHash = '5e585855e1deef5d0cf7ec5351a2e25852e8123999cd74c450d3434a39589df2';
+
+  static String hashCodeText(String raw) {
+    return sha256.convert(utf8.encode(raw.trim())).toString();
+  }
+
+  static bool verifyOwnerSecret(String input) {
+    return hashCodeText(input) == ownerHash;
+  }
+
+  static final List<Map<String, dynamic>> quests = [
+    {'id': 'q_d', 'rank': 'Rank D', 'title': 'Pendatang Baru Tempest', 'desc': 'Tonton 1 Episode anime', 'type': 'watch', 'target': 1, 'exp': 100, 'border': 'b_slime', 'bg': 'bg_slate', 'color': 0xFF38BDF8},
+    {'id': 'q_c', 'rank': 'Rank C', 'title': 'Pengamat Cerdik', 'desc': 'Tonton 5 Episode anime', 'type': 'watch', 'target': 5, 'exp': 250, 'border': 'b_kijin', 'bg': 'bg_ember', 'color': 0xFFF87171},
+    {'id': 'q_b', 'rank': 'Rank B', 'title': 'Kolektor Great Sage', 'desc': 'Simpan 3 Anime Favorit', 'type': 'fav', 'target': 3, 'exp': 500, 'border': 'b_sage', 'bg': 'bg_matrix', 'color': 0xFF22D3EE},
+    {'id': 'q_a', 'rank': 'Rank A', 'title': 'Komandan Federasi', 'desc': 'Kirim 5 Komentar Tempest', 'type': 'comment', 'target': 5, 'exp': 1000, 'border': 'b_frost', 'bg': 'bg_storm', 'color': 0xFF60A5FA},
+    {'id': 'q_s', 'rank': 'Rank S', 'title': 'Kebangkitan Demon Lord', 'desc': 'Tonton 30 Episode anime', 'type': 'watch', 'target': 30, 'exp': 2000, 'border': 'b_octagram', 'bg': 'bg_throne', 'color': 0xFFC084FC},
+    {'id': 'q_ss', 'rank': 'Rank SS', 'title': 'Origin Sovereign', 'desc': 'Tonton 60 Episode anime', 'type': 'watch', 'target': 60, 'exp': 3500, 'border': 'b_divinity', 'bg': 'bg_sovereign', 'color': 0xFFFBBF24},
+    {'id': 'q_ex', 'rank': 'Rank EX', 'title': 'Turn Null: Nihility Collapse', 'desc': 'Tonton 150 Episode anime', 'type': 'watch', 'target': 150, 'exp': 5000, 'border': 'b_nihility', 'bg': 'bg_turnnull', 'color': 0xFFF472B6},
+  ];
+
+  static final Map<String, Map<String, dynamic>> borders = {
+    'b_slime': {'name': 'Slime Aura (Rank D)', 'c1': 0xFF38BDF8, 'c2': 0xFF0284C7, 'glow': false},
+    'b_kijin': {'name': 'Kijin Crimson (Rank C)', 'c1': 0xFFF87171, 'c2': 0xFFDC2626, 'glow': true},
+    'b_sage': {'name': 'Great Sage Cyber (Rank B)', 'c1': 0xFF22D3EE, 'c2': 0xFFFBBF24, 'glow': true},
+    'b_frost': {'name': 'True Dragon Frost (Rank A)', 'c1': 0xFF93C5FD, 'c2': 0xFF2563EB, 'glow': true},
+    'b_octagram': {'name': 'Octagram Violet (Rank S)', 'c1': 0xFFE879F9, 'c2': 0xFF7E22CE, 'glow': true},
+    'b_divinity': {'name': 'Sovereign Divinity (Rank SS)', 'c1': 0xFFFDE047, 'c2': 0xFF38BDF8, 'glow': true},
+    'b_nihility': {'name': 'Nihility Abyssal Crown (Rank EX)', 'c1': 0xFFF472B6, 'c2': 0xFF8B5CF6, 'glow': true},
+    'b_owner': {'name': 'Sovereign Founder (OWNER)', 'c1': 0xFFFBBF24, 'c2': 0xFF38BDF8, 'glow': true},
+  };
+
+  static final Map<String, Map<String, dynamic>> backgrounds = {
+    'bg_slate': {'name': 'Jura Slate (Rank D)', 'c1': 0xFF0F172A, 'c2': 0xFF0F172A, 'border': 0xFF1E3A5F, 'tag': ''},
+    'bg_ember': {'name': 'Kijin Ember (Rank C)', 'c1': 0xFF2A0F14, 'c2': 0xFF111827, 'border': 0xFFF87171, 'tag': 'KIJIN'},
+    'bg_matrix': {'name': 'Sage Matrix (Rank B)', 'c1': 0xFF082F49, 'c2': 0xFF1E1B4B, 'border': 0xFF22D3EE, 'tag': 'GREAT SAGE'},
+    'bg_storm': {'name': 'Veldora Storm (Rank A)', 'c1': 0xFF0C4A6E, 'c2': 0xFF0F172A, 'border': 0xFF60A5FA, 'tag': 'TRUE DRAGON'},
+    'bg_throne': {'name': 'Demon Lord Throne (Rank S)', 'c1': 0xFF2E1065, 'c2': 0xFF0F172A, 'border': 0xFFC084FC, 'tag': 'OCTAGRAM'},
+    'bg_sovereign': {'name': 'Tempest Sovereign (Rank SS)', 'c1': 0xFF422006, 'c2': 0xFF0C4A6E, 'border': 0xFFFBBF24, 'tag': 'SOVEREIGN'},
+    'bg_turnnull': {'name': 'Ciel & Rimuru: Turn Null (Rank EX)', 'c1': 0xFF4A044E, 'c2': 0xFF082F49, 'border': 0xFFF472B6, 'tag': 'TURN NULL'},
+    'bg_owner': {'name': 'Imperial Throne (OWNER)', 'c1': 0xFF3B2804, 'c2': 0xFF091E3A, 'border': 0xFFFBBF24, 'tag': 'FOUNDER • OWNER'},
+  };
+
+  static Widget buildAvatar(String path, String borderId, {double radius = 22, bool isOwner = false}) {
+    final b = borders[isOwner && borderId == 'b_owner' ? 'b_owner' : borderId] ?? borders['b_slime']!;
+    final c1 = Color(b['c1'] as int);
+    final c2 = Color(b['c2'] as int);
+    final glow = b['glow'] == true;
+    ImageProvider? img;
+    if (path.startsWith('http')) {
+      img = NetworkImage(path);
+    } else if (path.isNotEmpty && File(path).existsSync()) {
+      img = FileImage(File(path));
+    }
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(2.6),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(colors: [c1, c2]),
+            boxShadow: glow ? [BoxShadow(color: c1.withOpacity(0.55), blurRadius: 8, spreadRadius: 1)] : [],
+          ),
+          child: CircleAvatar(
+            radius: radius,
+            backgroundColor: const Color(0xFF0B1120),
+            backgroundImage: img,
+            child: img == null ? Icon(Icons.water_drop, size: radius, color: c1) : null,
+          ),
+        ),
+        if (isOwner)
+          Positioned(
+            bottom: -4,
+            right: -4,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              decoration: BoxDecoration(color: const Color(0xFFFBBF24), borderRadius: BorderRadius.circular(6)),
+              child: const Text('OWNER', style: TextStyle(color: Color(0xFF0B1120), fontSize: 7, fontWeight: FontWeight.w900)),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -62,6 +153,162 @@ class AniService {
       'nextEp': m['nextAiringEpisode']?['episode'],
       'img': m['coverImage']?['large'] ?? '',
     }).toList();
+  }
+}
+
+
+class AuthGate extends StatefulWidget {
+  const AuthGate({super.key});
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  bool loading = true;
+  bool loggedIn = false;
+  bool isRegister = false;
+  final userCtrl = TextEditingController();
+  final passCtrl = TextEditingController();
+  final secretCtrl = TextEditingController();
+  String avatarPath = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _checkSession();
+  }
+
+  Future<void> _checkSession() async {
+    final p = await SharedPreferences.getInstance();
+    setState(() {
+      loggedIn = p.getString('current_user') != null;
+      loading = false;
+    });
+  }
+
+  Future<void> _pickAvatar() async {
+    final picker = ImagePicker();
+    final x = await picker.pickImage(source: ImageSource.gallery);
+    if (x != null) {
+      setState(() => avatarPath = x.path);
+    }
+  }
+
+  Future<void> _submit() async {
+    final u = userCtrl.text.trim();
+    final pw = passCtrl.text.trim();
+    if (u.length < 3 || pw.length < 4) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Username min. 3 huruf & Password min. 4 karakter')));
+      return;
+    }
+    final p = await SharedPreferences.getInstance();
+    final rawAccounts = p.getString('accounts_db') ?? '{}';
+    final Map<String, dynamic> db = jsonDecode(rawAccounts);
+    final pwHash = TempestStore.hashCodeText(pw);
+    final isOwner = TempestStore.verifyOwnerSecret(secretCtrl.text);
+
+    if (isRegister) {
+      if (db.containsKey(u)) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Username sudah terdaftar, silakan Masuk')));
+        return;
+      }
+      db[u] = {'pw': pwHash, 'owner': isOwner, 'avatar': avatarPath};
+      await p.setString('accounts_db', jsonEncode(db));
+    } else {
+      if (!db.containsKey(u) || db[u]['pw'] != pwHash) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Username atau Password salah!')));
+        return;
+      }
+      if (isOwner) db[u]['owner'] = true;
+      if (avatarPath.isNotEmpty) db[u]['avatar'] = avatarPath;
+      await p.setString('accounts_db', jsonEncode(db));
+    }
+
+    final acc = db[u];
+    final finalOwner = acc['owner'] == true;
+    await p.setString('current_user', u);
+    await p.setString('userName', u);
+    await p.setBool('userOwner', finalOwner);
+    if ((acc['avatar'] ?? '').toString().isNotEmpty) {
+      await p.setString('userAvatar', acc['avatar']);
+    }
+    if (finalOwner) {
+      await p.setString('activeBorder', 'b_owner');
+      await p.setString('activeBg', 'bg_owner');
+    }
+    setState(() => loggedIn = true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) return const Scaffold(backgroundColor: Color(0xFF0B1120), body: Center(child: CircularProgressIndicator(color: Color(0xFF38BDF8))));
+    if (loggedIn) return const MainNav();
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF0B1120),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(22),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: const Color(0xFF38BDF8).withOpacity(0.5)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GestureDetector(
+                    onTap: _pickAvatar,
+                    child: TempestStore.buildAvatar(avatarPath, 'b_slime', radius: 34),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: _pickAvatar,
+                    icon: const Icon(Icons.photo_library_rounded, size: 16, color: Color(0xFF38BDF8)),
+                    label: const Text('Pilih Foto / GIF dari Galeri', style: TextStyle(color: Color(0xFF38BDF8), fontSize: 12)),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(isRegister ? 'Daftar Warga Tempest' : 'Masuk ke RyaaNime', style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: Colors.white)),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: userCtrl,
+                    decoration: const InputDecoration(labelText: 'Username', prefixIcon: Icon(Icons.person_outline, color: Color(0xFF38BDF8))),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: passCtrl,
+                    obscureText: true,
+                    decoration: const InputDecoration(labelText: 'Password', prefixIcon: Icon(Icons.lock_outline, color: Color(0xFF38BDF8))),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: secretCtrl,
+                    obscureText: true,
+                    decoration: const InputDecoration(labelText: 'Kode Khusus (Opsional)', prefixIcon: Icon(Icons.vpn_key_outlined, color: Color(0xFFFBBF24))),
+                  ),
+                  const SizedBox(height: 18),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8), foregroundColor: const Color(0xFF0B1120), padding: const EdgeInsets.symmetric(vertical: 12)),
+                      onPressed: _submit,
+                      child: Text(isRegister ? 'Daftar & Masuk' : 'Masuk', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() => isRegister = !isRegister),
+                    child: Text(isRegister ? 'Sudah punya akun? Masuk di sini' : 'Belum punya akun? Daftar sekarang', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -660,6 +907,8 @@ class _PlayerPageState extends State<PlayerPage> {
   String userAvatar = '';
   int userExp = 0;
   bool userOwner = false;
+  String activeBorder = 'b_slime';
+  String activeBg = 'bg_slate';
 
   String statusMsg = 'Menyiapkan pemutar Tempest...';
   int loadToken = 0;
@@ -715,6 +964,8 @@ class _PlayerPageState extends State<PlayerPage> {
       'lvl': r['lvl'],
       'title': r['title'],
       'isOwner': userOwner,
+        'border': activeBorder,
+        'bg': activeBg,
       'text': text,
       'time': 'Baru saja',
     };

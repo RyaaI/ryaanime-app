@@ -743,7 +743,7 @@ class _PlayerPageState extends State<PlayerPage> {
     final title = (widget.item['title'] ?? '').toString().trim();
     final srvIdx = servers.indexOf(targetServer).clamp(0, 3);
 
-    Future?> getJson(Uri u) async {
+    Future<Map<String, dynamic>?> getJson(Uri u) async {
       try {
         final r = await http.get(u).timeout(const Duration(seconds: 15));
         if (!mounted || token != loadToken || r.statusCode != 200) return null;

@@ -10,7 +10,7 @@ class StreamService {
     'oploverz',
   ];
 
-  static Future<Map<String, dynamic>>? _getJson(Uri uri) async {
+  static Future<Map<String, dynamic>?> _getJson(Uri uri) async {
     try {
       final res = await http.get(uri).timeout(const Duration(seconds: 15));
       if (res.statusCode >= 200 && res.statusCode < 300) {
@@ -21,7 +21,7 @@ class StreamService {
     return null;
   }
 
-  static Future<Map<String, dynamic>>? resolveEpisode({
+  static Future<Map<String, dynamic>?> resolveEpisode({
     required List<String> titleCandidates,
     required int episode,
     String quality = '480p',

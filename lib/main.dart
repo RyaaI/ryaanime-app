@@ -348,6 +348,7 @@ class _HomeTabState extends State<HomeTab> {
   List<dynamic> favList = [];
 
   String activeBorder = 'b_slime';
+  String activeTitle = '';
   String activeBg = 'bg_slate';
   int watchCount = 0;
   int commentCount = 0;
@@ -1273,7 +1274,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
       vp?.pause();
       webCtrl?.runJavaScript("document.querySelectorAll('video,audio').forEach(v=>{v.pause();v.muted=true;});");
     } else if (state == AppLifecycleState.resumed) {
-      webCtrl?.runJavaScript("document.querySelectorAll('video').forEach(v=>{if(v.duration>300)v.muted=false;});");
+      webCtrl?.runJavaScript("document.querySelectorAll('video').forEach(v=>{ if(false)if(v.duration>300)v.muted=false;});");
     }
   }
   String _allowedHost = '';
@@ -1767,7 +1768,8 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
                         const Spacer(),
                         DropdownButton<String>(value: server, isDense: true, dropdownColor: const Color(0xFF0F172A), underline: const SizedBox(), style: const TextStyle(color: Colors.white, fontSize: 11), items: servers.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(), onChanged: (val) { if (val != null) { setState(() => server = val); initVideo(); } }),
                         const SizedBox(width: 6),
-                        GestureDetector(onTap: () => setState(() => autonext = !autonext), child: Text('Autonext', style: TextStyle(color: autonext ? const Color(0xFF38BDF8) : Colors.white54, fontSize: 11, fontWeight: FontWeight.w600))),
+                        GestureDetector(onTap: () => setState(() => autonext = !autonext), child: Text(IconButton(icon: const Icon(Icons.download_rounded, color: Colors.white), onPressed: () { final u = webCtrl?.currentUrl() ?? Future.value(''); u.then((val) { if (!mounted) return; ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(val != null && val.isNotEmpty ? 'Link stream: $val' : 'Link belum siap'))); }); }),
+                    'Autonext', style: TextStyle(color: autonext ? const Color(0xFF38BDF8) : Colors.white54, fontSize: 11, fontWeight: FontWeight.w600))),
                         const SizedBox(width: 6),
                         DropdownButton<String>(value: quality, isDense: true, dropdownColor: const Color(0xFF0F172A), underline: const SizedBox(), style: const TextStyle(color: Color(0xFFFBBF24), fontSize: 11, fontWeight: FontWeight.bold), items: qualities.map((q) => DropdownMenuItem(value: q, child: Text(q))).toList(), onChanged: (val) { if (val != null) { setState(() => quality = val); initVideo(); } }),
                         if (!useWebView) ...[
@@ -1889,8 +1891,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
                         children: [
                           Row(
                             children: [
-                              CircleAvatar(radius: 14, backgroundColor: const Color(0xFF38BDF8), backgroundImage: av.startsWith('http') ? NetworkImage(av) : null, child: !av.startsWith('http') ? const Icon(Icons.water_drop, size: 14, color: Color(0xFF0B1120)) : null),
-                              const SizedBox(width: 8),
+                              TempestStore.buildAvatar(av, activeBorder, radius: 16),
                               Expanded(child: Text('${c['name']} • Lvl. ${c['lvl']} ${c['title']}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isOwn ? const Color(0xFFFBBF24) : const Color(0xFF38BDF8)))),
                               Text(c['time'] ?? '', style: const TextStyle(color: Colors.white38, fontSize: 10)),
                             ],

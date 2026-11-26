@@ -238,18 +238,6 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
           _loading = false;
           _statusMsg = label;
         });
-            wv.runJavaScript('''
-              (function() {
-                var meta = document.querySelector('meta[name="viewport"]');
-                if (!meta) {
-                  meta = document.createElement('meta');
-                  meta.name = 'viewport';
-                  document.head.appendChild(meta);
-                }
-                meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
-                document.documentElement.style.touchAction = 'manipulation';
-              })();
-            ''');
         _startWatchTracker();
         return;
       } catch (_) {}

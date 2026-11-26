@@ -317,7 +317,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
                         if (!st) {
                           st = document.createElement('style');
                           st.id = 'rya-clean-style';
-                          st.textContent = '[id*="ad" i], [class*="popup" i], [class*="popunder" i], [class*="banner" i], [href*="download" i] { max-height: 0 !important; opacity: 0 !important; pointer-events: none !important; }';
+                          st.textContent = '[id*="ad" i], [class*="popup" i], [class*="popunder" i] { display: none !important; visibility: hidden !important; }';
                           (document.head || document.documentElement).appendChild(st);
                         }
 

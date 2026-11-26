@@ -901,11 +901,23 @@ class _ProfileModalState extends State<_ProfileModal> {
     return 1;
   }
 
-  bool _isCosmeticUnlocked(String key) {
+  bool _isCosmeticUnlocked(dynamic meta, [dynamic key = '']) {
     if (_owner) return true;
-    if (key == 'b_owner' || key == 'bg_owner') return false;
-    final lvl = (_exp ~/ 100) + 1;
-    return lvl >= _requiredLevelForKey(key);
+    final k = key.toString();
+    if (k.contains('owner')) return false;
+    int reqLevel = 0;
+    int? reqExp;
+    if (meta is Map) {
+      final rawReq = meta['minLevel'] ?? meta['level'] ?? meta['reqLevel'] ?? meta['lv'] ?? 0;
+      reqLevel = rawReq is int ? rawReq : int.tryParse(rawReq.toString()) ?? 0;
+      final rawExp = meta['minExp'] ?? meta['exp'] ?? meta['reqExp'];
+      if (rawExp != null) {
+        reqExp = rawExp is int ? rawExp : int.tryParse(rawExp.toString()) ?? 0;
+      }
+    }
+    final curLevel = (widget.exp ~/ 100) + 1;
+    if (reqExp != null && widget.exp < reqExp) return false;
+    return curLevel >= reqLevel;
   }
 
   Future<void> _selectBorder(String id) async {

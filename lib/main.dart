@@ -664,7 +664,7 @@ class _PlayerPageState extends State<PlayerPage> {
   String statusMsg = 'Menyiapkan pemutar Tempest...';
   int loadToken = 0;
   final TextEditingController commentCtrl = TextEditingController();
-  List> comments = [];
+  List<Map<String, dynamic>> comments = [];
 
   @override
   void initState() {
@@ -738,7 +738,7 @@ class _PlayerPageState extends State<PlayerPage> {
     return u.contains('.mp4') || u.contains('.m3u8') || u.contains('.webm');
   }
 
-  Future?> _fetchStream(String targetServer, int token) async {
+  Future<Map<String, String>?> _fetchStream(String targetServer, int token) async {
     final base = streamApiBase.trim().replaceAll(RegExp(r'/+$'), '');
     final title = (widget.item['title'] ?? '').toString().trim();
     final srvIdx = servers.indexOf(targetServer).clamp(0, 3);

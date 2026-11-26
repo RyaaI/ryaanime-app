@@ -235,6 +235,7 @@ class _AuthGateState extends State<AuthGate> {
     if (finalOwner) {
       await p.setString('activeBorder', 'b_owner');
       await p.setString('activeBg', 'bg_owner');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('👑 Status OWNER Terverifikasi!')));
     }
     setState(() => loggedIn = true);
   }
@@ -349,6 +350,193 @@ class HomeTab extends StatefulWidget {
 }
 
 class _HomeTabState extends State<HomeTab> {
+
+  String activeBorder = 'b_slime';
+  String activeBg = 'bg_slate';
+  int watchCount = 0;
+  int commentCount = 0;
+  List<String> claimedQuests = [];
+
+  Future<void> _syncTempestData() async {
+    final p = await SharedPreferences.getInstance();
+    setState(() {
+      userName = p.getString('userName') ?? p.getString('current_user') ?? 'Warga Tempest';
+      userAvatar = p.getString('userAvatar') ?? '';
+      userOwner = p.getBool('userOwner') ?? false;
+      activeBorder = p.getString('activeBorder') ?? (userOwner ? 'b_owner' : 'b_slime');
+      activeBg = p.getString('activeBg') ?? (userOwner ? 'bg_owner' : 'bg_slate');
+      watchCount = p.getInt('watchCount') ?? 0;
+      commentCount = p.getInt('commentCount') ?? 0;
+      claimedQuests = p.getStringList('claimedQuests') ?? [];
+    });
+  }
+
+  void _openTempestHub() {
+    _syncTempestData();
+    final secretCtrl = TextEditingController();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0F172A),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModal) => DefaultTabController(
+          length: 3,
+          child: SizedBox(
+            height: MediaQuery.of(ctx).size.height * 0.82,
+            child: Column(
+              children: [
+                const SizedBox(height: 10),
+                Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(4))),
+                const TabBar(
+                  labelColor: Color(0xFF38BDF8),
+                  unselectedLabelColor: Colors.white60,
+                  indicatorColor: Color(0xFF38BDF8),
+                  tabs: [Tab(text: 'Profil'), Tab(text: 'Quest (7)'), Tab(text: 'Koleksi')],
+                ),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      ListView(
+                        padding: const EdgeInsets.all(16),
+                        children: [
+                          Center(child: TempestStore.buildAvatar(userAvatar, activeBorder, radius: 38, isOwner: userOwner)),
+                          const SizedBox(height: 8),
+                          Center(
+                            child: ElevatedButton.icon(
+                              onPressed: () async {
+                                final x = await ImagePicker().pickImage(source: ImageSource.gallery);
+                                if (x != null) {
+                                  final p = await SharedPreferences.getInstance();
+                                  await p.setString('userAvatar', x.path);
+                                  setState(() => userAvatar = x.path);
+                                  setModal(() {});
+                                }
+                              },
+                              icon: const Icon(Icons.photo_library, size: 16),
+                              label: const Text('Ganti Foto / GIF dari Galeri'),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          if (!userOwner) ...[
+                            TextField(controller: secretCtrl, obscureText: true, decoration: const InputDecoration(labelText: 'Aktivasi Kode Rahasia', border: OutlineInputBorder())),
+                            const SizedBox(height: 8),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFBBF24), foregroundColor: Colors.black),
+                              onPressed: () async {
+                                if (TempestStore.verifyOwnerSecret(secretCtrl.text)) {
+                                  final p = await SharedPreferences.getInstance();
+                                  await p.setBool('userOwner', true);
+                                  await p.setString('activeBorder', 'b_owner');
+                                  await p.setString('activeBg', 'bg_owner');
+                                  setState(() { userOwner = true; activeBorder = 'b_owner'; activeBg = 'bg_owner'; });
+                                  setModal(() {});
+                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('👑 Set Eksklusif Owner Aktif!')));
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kode tidak valid!')));
+                                }
+                              },
+                              child: const Text('Verifikasi Kode', style: TextStyle(fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                          const SizedBox(height: 20),
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(foregroundColor: Colors.redAccent, side: const BorderSide(color: Colors.redAccent)),
+                            onPressed: () async {
+                              final p = await SharedPreferences.getInstance();
+                              await p.remove('current_user');
+                              if (!mounted) return;
+                              Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const AuthGate()), (_) => false);
+                            },
+                            icon: const Icon(Icons.logout),
+                            label: const Text('Keluar Akun (Logout)'),
+                          ),
+                        ],
+                      ),
+                      ListView.builder(
+                        padding: const EdgeInsets.all(14),
+                        itemCount: TempestStore.quests.length,
+                        itemBuilder: (_, i) {
+                          final q = TempestStore.quests[i];
+                          final id = q['id'] as String;
+                          final target = q['target'] as int;
+                          final prog = q['type'] == 'comment' ? commentCount : (q['type'] == 'fav' ? favList.length : watchCount);
+                          final done = prog >= target;
+                          final claimed = claimedQuests.contains(id);
+                          return Card(
+                            color: const Color(0xFF1E293B),
+                            margin: const EdgeInsets.only(bottom: 10),
+                            child: ListTile(
+                              title: Text('[${q['rank']}] ${q['title']}', style: TextStyle(color: Color(q['color'] as int), fontWeight: FontWeight.bold, fontSize: 13)),
+                              subtitle: Text('${q['desc']} ($prog/$target)\nHadiah: +${q['exp']} EXP + Border & BG', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                              trailing: ElevatedButton(
+                                onPressed: (done && !claimed) ? () async {
+                                  final p = await SharedPreferences.getInstance();
+                                  claimedQuests.add(id);
+                                  await p.setStringList('claimedQuests', claimedQuests);
+                                  await p.setInt('userExp', (p.getInt('userExp') ?? 0) + (q['exp'] as int));
+                                  setState(() {});
+                                  setModal(() {});
+                                } : null,
+                                child: Text(claimed ? 'Diklaim' : (done ? 'Klaim' : 'Proses'), style: const TextStyle(fontSize: 11)),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      ListView(
+                        padding: const EdgeInsets.all(14),
+                        children: [
+                          const Text('Pilih Border Avatar (Equip / Unequip)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 8),
+                          ...TempestStore.borders.entries.map((e) {
+                            final isOwnerItem = e.key == 'b_owner';
+                            final unlocked = isOwnerItem ? userOwner : (e.key == 'b_slime' || TempestStore.quests.any((q) => q['border'] == e.key && claimedQuests.contains(q['id'])));
+                            return ListTile(
+                              leading: TempestStore.buildAvatar(userAvatar, e.key, radius: 18, isOwner: isOwnerItem),
+                              title: Text(e.value['name'], style: const TextStyle(color: Colors.white, fontSize: 12)),
+                              trailing: unlocked
+                                  ? Radio<String>(value: e.key, groupValue: activeBorder, onChanged: (v) async {
+                                      final p = await SharedPreferences.getInstance();
+                                      await p.setString('activeBorder', v!);
+                                      setState(() => activeBorder = v);
+                                      setModal(() {});
+                                    })
+                                  : const Icon(Icons.lock, size: 16, color: Colors.white38),
+                            );
+                          }),
+                          const Divider(color: Colors.white24),
+                          const Text('Pilih Background Komentar (Equip / Unequip)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 8),
+                          ...TempestStore.backgrounds.entries.map((e) {
+                            final isOwnerItem = e.key == 'bg_owner';
+                            final unlocked = isOwnerItem ? userOwner : (e.key == 'bg_slate' || TempestStore.quests.any((q) => q['bg'] == e.key && claimedQuests.contains(q['id'])));
+                            return ListTile(
+                              tileColor: Color(e.value['c1'] as int),
+                              title: Text(e.value['name'], style: const TextStyle(color: Colors.white, fontSize: 12)),
+                              trailing: unlocked
+                                  ? Radio<String>(value: e.key, groupValue: activeBg, onChanged: (v) async {
+                                      final p = await SharedPreferences.getInstance();
+                                      await p.setString('activeBg', v!);
+                                      setState(() => activeBg = v);
+                                      setModal(() {});
+                                    })
+                                  : const Icon(Icons.lock, size: 16, color: Colors.white38),
+                            );
+                          }),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   String name = 'Warga Tempest';
   String avatarUrl = '';
   int exp = 0;
@@ -475,6 +663,44 @@ class _HomeTabState extends State<HomeTab> {
                   children: [
                     const Padding(
                       padding: EdgeInsets.only(bottom: 8),
+
+          Container(
+            margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [Color(0xFF0F172A), Color(0xFF1E293B)]),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFFBBF24).withOpacity(0.6)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('🧪 Versi Demo RyaaNime • Federasi Tempest', style: TextStyle(color: Color(0xFFFBBF24), fontWeight: FontWeight.bold, fontSize: 13)),
+                const SizedBox(height: 4),
+                const Text('Aplikasi ini masih tahap demo uji coba. Laporkan bug atau gabung komunitas lewat tautan di bawah:', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFF38BDF8), side: const BorderSide(color: Color(0xFF38BDF8))),
+                        onPressed: () => launchUrl(Uri.parse('mailto:ryaaeulah12@gmail.com?subject=Bug%20Report%20RyaaNime'), mode: LaunchMode.externalApplication),
+                        child: const Text('🐞 Lapor Bug', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF22C55E), foregroundColor: Colors.black),
+                        onPressed: () => launchUrl(Uri.parse('https://chat.whatsapp.com/Jm3MgGSBiCJFO2PgQfMjMg'), mode: LaunchMode.externalApplication),
+                        child: const Text('💬 Grup WA', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
                       child: Text('Sedang Tayang (Ongoing)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF38BDF8))),
                     ),
                     SizedBox(
@@ -880,6 +1106,7 @@ class PlayerPage extends StatefulWidget {
 }
 
 class _PlayerPageState extends State<PlayerPage> {
+  String _allowedHost = '';
   static const String streamApiBase = 'http://191.222.39.242:3001';
   final List<String> servers = ['Server 1', 'Server 2', 'Server 3', 'Server 4'];
   final List<String> qualities = ['360p', '480p', '720p', '1080p'];

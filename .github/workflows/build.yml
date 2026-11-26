@@ -1,17 +1,41 @@
 name: Build RyaaNime APK
-on: [push]
+
+on:
+  push:
+    branches: [ main ]
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-      - run: |
-          flutter create . --project-name ryaanime --org com.ryaal.ryaanime
-          awk 'NR==1{print; print "    <uses-permission android:name=\"android.permission.INTERNET\"/>"; next}1' android/app/src/main/AndroidManifest.xml > tmp.xml && mv tmp.xml android/app/src/main/AndroidManifest.xml
-          sed -i 's/android:label="ryaanime"/android:label="RyaaNime" android:usesCleartextTraffic="true"/g' android/app/src/main/AndroidManifest.xml
+
+      - name: Setup Android & Build APK
+        run: |
+          flutter create . --project-name ryaanime --org com.ryaai.ryaanime
+
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          if ! grep -q "android.permission.INTERNET" "$MANIFEST"; then
+            sed -i 's/<manifest[^>]*>/&\n    <uses-permission android:name="android.permission.INTERNET"\/>/' "$MANIFEST"
+          fi
+          sed -i 's/android:label="[^"]*"/android:label="RyaaNime" android:usesCleartextTraffic="true"/g' "$MANIFEST"
+
+          if [ -f "android/app/build.gradle.kts" ]; then
+            sed -i -E 's/minSdk\s*=\s*[0-9]+/minSdk = 21/g; s/minSdk\s*=\s*flutter\.minSdkVersion/minSdk = 21/g' android/app/build.gradle.kts
+            sed -i -E 's/compileSdk\s*=\s*[0-9]+/compileSdk = 35/g; s/compileSdk\s*=\s*flutter\.compileSdkVersion/compileSdk = 35/g' android/app/build.gradle.kts
+            sed -i -E 's/targetSdk\s*=\s*[0-9]+/targetSdk = 35/g; s/targetSdk\s*=\s*flutter\.targetSdkVersion/targetSdk = 35/g' android/app/build.gradle.kts
+          fi
+
+          if [ -f "android/app/build.gradle" ]; then
+            sed -i -E 's/minSdkVersion\s+[0-9]+/minSdkVersion 21/g; s/minSdkVersion\s+flutter\.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
+            sed -i -E 's/compileSdkVersion\s+[0-9]+/compileSdkVersion 35/g; s/compileSdkVersion\s+flutter\.compileSdkVersion/compileSdkVersion 35/g' android/app/build.gradle
+            sed -i -E 's/targetSdkVersion\s+[0-9]+/targetSdkVersion 35/g; s/targetSdkVersion\s+flutter\.targetSdkVersion/targetSdkVersion 35/g' android/app/build.gradle
+          fi
+
           python3 -c '
           import zlib, struct, glob, shutil
           w, h = 512, 512
@@ -23,8 +47,10 @@ jobs:
                   r, g, b = 11, 17, 32
                   if dx*dx + dy*dy <= 1.0 and y <= 370:
                       r, g, b = 56, 189, 248
-                      if (x - 195)**2 + (y - 220)**2 <= 320: r, g, b = 224, 242, 254
-                      if (abs(x - 215) <= 22 and abs(y - 285) <= 5) or (abs(x - 297) <= 22 and abs(y - 285) <= 5): r, g, b = 15, 23, 42
+                      if (x - 195)**2 + (y - 220)**2 <= 320:
+                          r, g, b = 224, 242, 254
+                      if (abs(x - 215) <= 22 and abs(y - 285) <= 5) or (abs(x - 297) <= 22 and abs(y - 285) <= 5):
+                          r, g, b = 15, 23, 42
                   raw.extend((r, g, b))
           chk = lambda t, d: struct.pack("!I", len(d)) + t + d + struct.pack("!I", zlib.crc32(t + d) & 0xffffffff)
           png = b"\x89PNG\r\n\x1a\n" + chk(b"IHDR", struct.pack("!IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chk(b"IDAT", zlib.compress(bytes(raw), 9)) + chk(b"IEND", b"")
@@ -32,8 +58,10 @@ jobs:
           for f in glob.glob("android/app/src/main/res/mipmap-*/ic_launcher.png"):
               shutil.copy("icon.png", f)
           '
+
           flutter pub get
           flutter build apk --release
+
       - uses: actions/upload-artifact@v4
         with:
           name: RyaaNime-APK

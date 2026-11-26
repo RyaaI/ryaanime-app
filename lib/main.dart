@@ -350,6 +350,10 @@ class HomeTab extends StatefulWidget {
 }
 
 class _HomeTabState extends State<HomeTab> {
+  String userName = 'Warga Tempest';
+  String userAvatar = '';
+  bool userOwner = false;
+  List<dynamic> favList = [];
 
   String activeBorder = 'b_slime';
   String activeBg = 'bg_slate';
@@ -661,7 +665,7 @@ class _HomeTabState extends State<HomeTab> {
                 return ListView(
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   children: [
-                    const Padding(
+                    Padding(
                       padding: EdgeInsets.only(bottom: 8),
 
           Container(

@@ -297,11 +297,14 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
     if (!mounted) return;
     setState(() => _isFullscreen = !_isFullscreen);
     if (_isFullscreen) {
-      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
       await SystemChrome.setPreferredOrientations([
         DeviceOrientation.landscapeLeft,
         DeviceOrientation.landscapeRight,
       ]);
+      await Future.delayed(const Duration(milliseconds: 120));
+      if (mounted) {
+        await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      }
     } else {
       await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
       await Future.delayed(const Duration(milliseconds: 120));

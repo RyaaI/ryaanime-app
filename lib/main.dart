@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -1047,7 +1048,7 @@ class SearchTab extends StatefulWidget {
 }
 
 class _SearchTabState extends State<SearchTab> {
-  List> results = [];
+  List<Map<String, dynamic>> results = [];
   bool loading = false;
   final genres = [
     'Action', 'Adventure', 'Comedy', 'Drama', 'Ecchi', 'Fantasy',
@@ -1246,6 +1247,26 @@ class PlayerPage extends StatefulWidget {
 }
 
 class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
+  Timer? _exp24Timer;
+  bool _epExpAwarded = false;
+
+  void _startExp24Timer() {
+    _exp24Timer?.cancel();
+    _exp24Timer = Timer.periodic(const Duration(minutes: 24), (_) async {
+      if (!mounted) return;
+      final p = await SharedPreferences.getInstance();
+      final nextExp = (p.getInt('exp') ?? 0) + 15;
+      await p.setInt('exp', nextExp);
+    });
+  }
+
+  Future<void> _awardEpisodeCompleteExp() async {
+    if (_epExpAwarded || !mounted) return;
+    _epExpAwarded = true;
+    final p = await SharedPreferences.getInstance();
+    final nextExp = (p.getInt('exp') ?? 0) + 25;
+    await p.setInt('exp', nextExp);
+  }
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
@@ -1295,6 +1316,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _startExp24Timer();
     currentEp = widget.ep;
     loadUser();
     loadComments();
@@ -1304,6 +1326,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _exp24Timer?.cancel();
     loadToken++;
     commentCtrl.dispose();
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);

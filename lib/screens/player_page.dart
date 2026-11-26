@@ -252,20 +252,88 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
           onNavigationRequest: (req) {
             final targetUri = Uri.tryParse(req.url);
             if (targetUri == null) return NavigationDecision.prevent;
-            if (req.isMainFrame &&
-                initialHost.isNotEmpty &&
-                !targetUri.host.contains(initialHost) &&
-                !targetUri.host.contains('blogger') &&
-                !targetUri.host.contains('desustream') &&
-                !targetUri.host.contains('vidhide') &&
-                !targetUri.host.contains('filedon') &&
-                !targetUri.host.contains('mp4upload') &&
-                !targetUri.host.contains('yourupload')) {
+
+            final rawLower = req.url.toLowerCase();
+            final hostLower = targetUri.host.toLowerCase();
+            final schemeLower = targetUri.scheme.toLowerCase();
+            final allowedHost = (initialHost.isNotEmpty &&
+                    hostLower.contains(initialHost.toLowerCase())) ||
+                hostLower.contains('blogger') ||
+                hostLower.contains('desustream') ||
+                hostLower.contains('vidhide') ||
+                hostLower.contains('filedon') ||
+                hostLower.contains('mp4upload') ||
+                hostLower.contains('yourupload');
+
+            const blockedTerms = [
+              'doubleclick',
+              'googlesyndication',
+              'adserver',
+              'popads',
+              'popcash',
+              'propeller',
+              'exoclick',
+              'juicyads',
+              'trafficjunky',
+              'revcontent',
+              'mgid',
+              'outbrain',
+              'taboola',
+              'terabox',
+              't.me/',
+              'whatsapp.com',
+              'play.google.com',
+              '/dl/',
+              'dl=',
+              'force_download',
+              'download='
+            ];
+
+            final isBlockedScheme =
+                schemeLower != 'http' && schemeLower != 'https';
+            final isBlockedUrl =
+                blockedTerms.any((t) => rawLower.contains(t));
+
+            if (isBlockedScheme ||
+                isBlockedUrl ||
+                (req.isMainFrame && !allowedHost)) {
               return NavigationDecision.prevent;
             }
             return NavigationDecision.navigate;
           },
-          onPageFinished: (_) {
+          onPageFinished: (_) async {
+            if (!mounted || token != _loadToken) return;
+            try {
+              if (_webCtrl != null) {
+                await _webCtrl!.runJavaScript('''
+                  (function() {
+                    try {
+                      window.open = function() { return null; };
+                      function cleanEmbed() {
+                        document.querySelectorAll('a[target="_blank"]').forEach(function(a) {
+                          a.setAttribute('target', '_self');
+                        });
+                        var st = document.getElementById('rya-clean-style');
+                        if (!st) {
+                          st = document.createElement('style');
+                          st.id = 'rya-clean-style';
+                          st.textContent = '[id*="ad" i], [class*="popup" i], [class*="popunder" i], [class*="banner" i], [href*="download" i] { max-height: 0 !important; opacity: 0 !important; pointer-events: none !important; }';
+                          (document.head || document.documentElement).appendChild(st);
+                        }
+
+                      }
+                      cleanEmbed();
+                      var v0 = document.querySelector('video');
+                      if (v0 && v0.paused) { v0.play().catch(function() {}); }
+                      if (!window._ryaObs) {
+                        window._ryaObs = new MutationObserver(cleanEmbed);
+                        window._ryaObs.observe(document.documentElement, { childList: true, subtree: true });
+                      }
+                    } catch (e) {}
+                  })();
+                ''');
+              }
+            } catch (_) {}
             if (!mounted || token != _loadToken) return;
             setState(() {
               _loading = false;

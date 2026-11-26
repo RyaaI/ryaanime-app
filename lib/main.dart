@@ -1166,7 +1166,7 @@ class _PlayerPageState extends State<PlayerPage> {
                           vp!,
                           allowScrubbing: true,
                           padding: const EdgeInsets.symmetric(vertical: 4),
-                          colors: const VideoProgressColors(
+                          colors: VideoProgressColors(
                             playedColor: Color(0xFFEF4444),
                             bufferedColor: Colors.white38,
                             backgroundColor: Colors.white12,

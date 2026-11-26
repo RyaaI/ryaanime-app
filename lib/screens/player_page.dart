@@ -303,8 +303,11 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
         DeviceOrientation.landscapeRight,
       ]);
     } else {
-      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
       await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+      await Future.delayed(const Duration(milliseconds: 120));
+      if (mounted) {
+        await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      }
     }
     if (wasPlaying && _videoCtrl != null && mounted) {
       await Future.delayed(const Duration(milliseconds: 220));

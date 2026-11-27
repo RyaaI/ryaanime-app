@@ -3,16 +3,15 @@ import 'package:http/http.dart' as http;
 
 class StreamService {
   static const String baseUrl = 'http://191.222.39.242:3001';
+  static const String resolverBaseUrl = 'http://191.222.39.226:30001';
   static const List<String> providers = [
-    'otakudesu',
-    'samehadaku',
-    'kuramanime',
     'oploverz',
+    'otakudesu',
   ];
 
-  static Future<Map<String, dynamic>?> _getJson(Uri uri) async {
+  static Future?> _getJson(Uri uri, {int timeoutSec = 15}) async {
     try {
-      final res = await http.get(uri).timeout(const Duration(seconds: 15));
+      final res = await http.get(uri).timeout(Duration(seconds: timeoutSec));
       if (res.statusCode >= 200 && res.statusCode < 300) {
         final decoded = jsonDecode(res.body);
         if (decoded is Map<String, dynamic>) return decoded;
@@ -21,15 +20,64 @@ class StreamService {
     return null;
   }
 
-  static Future<Map<String, dynamic>?> resolveEpisode({
+  static Future<String?> _resolveDirectMp4(String rawUrl) async {
+    if (rawUrl.isEmpty) return null;
+    if (RegExp(r'\.mp4(\?|$)', caseSensitive: false).hasMatch(rawUrl)) {
+      return rawUrl;
+    }
+    final res = await _getJson(
+      Uri.parse('$resolverBaseUrl/resolve?url=${Uri.encodeComponent(rawUrl)}'),
+      timeoutSec: 12,
+    );
+    final direct = (res?['directUrl'] ?? '').toString().trim();
+    if (direct.startsWith('http')) return direct;
+    return null;
+  }
+
+  static String? _pickOploverzFiledonUrl(dynamic downloadUrlObj, String quality, int serverIndex) {
+    if (downloadUrlObj is! Map) return null;
+    final qualities = downloadUrlObj['qualities'];
+    if (qualities is! List || qualities.isEmpty) return null;
+
+    final qClean = quality.replaceAll('p', '').trim();
+    Map? chosenQual;
+    for (final item in qualities) {
+      if (item is Map && (item['title'] ?? '').toString().contains(qClean)) {
+        chosenQual = item;
+        break;
+      }
+    }
+    chosenQual ??= qualities.last is Map ? qualities.last as Map : null;
+    final urlList = chosenQual?['urls'];
+    if (urlList is! List || urlList.isEmpty) return null;
+
+    final filedonUrls = <String>[];
+    final otherUrls = <String>[];
+    for (final u in urlList) {
+      if (u is! Map) continue;
+      final href = (u['url'] ?? '').toString().trim();
+      if (!href.startsWith('http')) continue;
+      if (href.contains('filedon.co')) {
+        filedonUrls.add(href);
+      } else {
+        otherUrls.add(href);
+      }
+    }
+
+    final pool = filedonUrls.isNotEmpty ? filedonUrls : otherUrls;
+    if (pool.isEmpty) return null;
+    return pool[serverIndex < pool.length ? serverIndex : 0];
+  }
+
+  static Future?> resolveEpisode({
     required List<String> titleCandidates,
     required int episode,
-    String quality = '480p',
+    String quality = '720p',
     int serverIndex = 0,
-    String preferredProvider = 'otakudesu',
+    String preferredProvider = 'oploverz',
   }) async {
     final ordered = [
-      preferredProvider,
+      if (providers.contains(preferredProvider)) preferredProvider,
       ...providers.where((p) => p != preferredProvider),
     ];
 
@@ -81,10 +129,18 @@ class StreamService {
 
         final downloadUrl = details['downloadUrl'];
         final qList = details['server']?['qualityList'];
-        String streamUrl = '';
+        String rawStreamUrl = '';
         String serverLabel = provider.toUpperCase();
 
-        if (qList is List && qList.isNotEmpty) {
+        if (provider == 'oploverz') {
+          final pickedFiledon = _pickOploverzFiledonUrl(downloadUrl, quality, serverIndex);
+          if (pickedFiledon != null) {
+            rawStreamUrl = pickedFiledon;
+            serverLabel = 'OPLOVERZ • $quality';
+          }
+        }
+
+        if (rawStreamUrl.isEmpty && qList is List && qList.isNotEmpty) {
           Map? chosenQual;
           final qClean = quality.replaceAll('p', '');
           for (final item in qList) {
@@ -94,6 +150,7 @@ class StreamService {
             }
           }
           chosenQual ??= qList.first is Map ? qList.first as Map : null;
+
           final srvList = chosenQual?['serverList'];
           if (srvList is List && srvList.isNotEmpty) {
             final picked = srvList[serverIndex < srvList.length ? serverIndex : 0];
@@ -106,7 +163,7 @@ class StreamService {
                 );
                 final u = (srvJson?['data']?['details']?['url'] ?? '').toString().trim();
                 if (u.startsWith('http')) {
-                  streamUrl = u;
+                  rawStreamUrl = u;
                   serverLabel = '${provider.toUpperCase()} • $sTitle';
                 }
               }
@@ -114,21 +171,16 @@ class StreamService {
           }
         }
 
-        if (streamUrl.isEmpty) {
-          final defUrl = (details['defaultStreamingUrl'] ?? '').toString().trim();
-          if (defUrl.startsWith('http')) {
-            streamUrl = defUrl;
-            serverLabel = '${provider.toUpperCase()} • Default';
+        if (rawStreamUrl.isNotEmpty) {
+          final directMp4 = await _resolveDirectMp4(rawStreamUrl);
+          if (directMp4 != null && directMp4.isNotEmpty) {
+            return {
+              'url': directMp4,
+              'label': serverLabel,
+              'provider': provider,
+              'downloadUrl': downloadUrl,
+            };
           }
-        }
-
-        if (streamUrl.isNotEmpty) {
-          return {
-            'url': streamUrl,
-            'label': serverLabel,
-            'provider': provider,
-            'downloadUrl': downloadUrl,
-          };
         }
       }
     }

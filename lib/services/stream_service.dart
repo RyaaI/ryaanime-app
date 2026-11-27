@@ -139,21 +139,34 @@ class StreamService {
           .where((w) => w.length >= 3 && !const {'season', 'part', 'cour', 'the', 'and', 'subtitle', 'indonesia'}.contains(w))
           .toList();
 
-      for (final candidate in animeList.take(5)) {
+      final rankedCandidates = >[];
+      for (final candidate in animeList) {
         if (candidate is! Map) continue;
         final animeId = (candidate['animeId'] ?? '').toString().trim();
+        if (animeId.isEmpty || animeId.toLowerCase() == 'none') continue;
         final candTitle = (candidate['title'] ?? '').toString().trim();
-        if (animeId.isEmpty) continue;
         final hay = '$candTitle $animeId'.toLowerCase();
+        int score = 0;
+        if (keyTokens.isNotEmpty) {
+          score = keyTokens.where((t) => hay.contains(t)).length;
+          if (score == 0) continue;
+        }
         if (reqSeason != null && reqSeason.isNotEmpty) {
           final hasSeason = RegExp(r'(?:season[-_\s]*' + reqSeason + r'\b|\bs' + reqSeason + r'(?:\b|-|_))', caseSensitive: false).hasMatch(hay);
-          if (!hasSeason) continue;
+          if (hasSeason) score += 2;
         }
-        final minRequiredTokens = keyTokens.length >= 2 ? 2 : 1;
-        if (keyTokens.isNotEmpty) {
-          final matchedTokens = keyTokens.where((t) => hay.contains(t)).length;
-          if (matchedTokens < minRequiredTokens) continue;
-        }
+        rankedCandidates.add({
+          'animeId': animeId,
+          'hay': hay,
+          'score': score,
+        });
+      }
+      rankedCandidates.sort((a, b) => (b['score'] as int).compareTo(a['score'] as int));
+      final requiredHits = keyTokens.length >= 2 ? 2 : (keyTokens.isEmpty ? 0 : 1);
+
+      for (final cand in rankedCandidates.take(2)) {
+        final animeId = cand['animeId'] as String;
+        final hay = cand['hay'] as String;
 
         final animeJson = await _getJson(
           Uri.parse('$baseUrl/$provider/anime/${Uri.encodeComponent(animeId)}'),
@@ -161,13 +174,9 @@ class StreamService {
         final animeDetails = animeJson?['data']?['details'];
         final detailTitle = (animeDetails is Map ? (animeDetails['title'] ?? '') : '').toString().trim();
         final fullHay = '$hay $detailTitle'.toLowerCase();
-        if (reqSeason != null && reqSeason.isNotEmpty) {
-          final hasSeasonDetail = RegExp(r'(?:season[-_\s]*' + reqSeason + r'\b|\bs' + reqSeason + r'(?:\b|-|_))', caseSensitive: false).hasMatch(fullHay);
-          if (!hasSeasonDetail) continue;
-        }
-        if (keyTokens.isNotEmpty) {
+        if (requiredHits > 0) {
           final matchedDetailTokens = keyTokens.where((t) => fullHay.contains(t)).length;
-          if (matchedDetailTokens < minRequiredTokens) continue;
+          if (matchedDetailTokens < requiredHits) continue;
         }
         final epList = animeDetails is Map ? animeDetails['episodeList'] : null;
         if (epList is! List || epList.isEmpty) continue;

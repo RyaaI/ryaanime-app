@@ -34,6 +34,9 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
   bool _useWebView = false;
   bool _locked = false;
   bool _isFullscreen = false;
+  bool _showControls = true;
+  Timer? _hideControlsTimer;
+  String? _seekOverlayText;
   String _statusMsg = 'Memuat server...';
   String _activeStreamUrl = '';
   dynamic _downloadData;
@@ -76,6 +79,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
       SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     }
+    _hideControlsTimer?.cancel();
     super.dispose();
   }
 
@@ -236,7 +240,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
           _videoCtrl = ctrl;
           _useWebView = false;
           _loading = false;
-          _statusMsg = 'Server ${_serverIdx + 1}';
+          _statusMsg = label;
         });
         _startWatchTracker();
         return;
@@ -337,7 +341,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
             if (!mounted || token != _loadToken) return;
             setState(() {
               _loading = false;
-              _statusMsg = 'Server ${_serverIdx + 1}';
+              _statusMsg = label;
             });
             _startWatchTracker();
           },
@@ -350,9 +354,67 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
       _webCtrl = wv;
       _useWebView = true;
       _loading = false;
-      _statusMsg = 'Server ${_serverIdx + 1}';
+      _statusMsg = label;
     });
     _startWatchTracker();
+  }
+
+  void _restartHideControlsTimer() {
+    _hideControlsTimer?.cancel();
+    _hideControlsTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted && _videoCtrl != null && _videoCtrl!.value.isPlaying) {
+        setState(() => _showControls = false);
+      }
+    });
+  }
+
+  void _toggleControlsVisibility() {
+    if (_locked) return;
+    setState(() => _showControls = !_showControls);
+    if (_showControls) _restartHideControlsTimer();
+  }
+
+  Future<void> _seekRelative(int seconds) async {
+    final ctrl = _videoCtrl;
+    if (ctrl == null || !ctrl.value.isInitialized) return;
+    final pos = ctrl.value.position;
+    final dur = ctrl.value.duration;
+    var target = pos + Duration(seconds: seconds);
+    if (target < Duration.zero) target = Duration.zero;
+    if (target > dur) target = dur;
+    await ctrl.seekTo(target);
+    if (!mounted) return;
+    setState(() {
+      _seekOverlayText = seconds > 0 ? '+${seconds}d' : '${seconds}d';
+    });
+    _restartHideControlsTimer();
+    Future.delayed(const Duration(milliseconds: 700), () {
+      if (mounted && _seekOverlayText != null) {
+        setState(() => _seekOverlayText = null);
+      }
+    });
+  }
+
+  void _togglePlayPause() {
+    final ctrl = _videoCtrl;
+    if (ctrl == null || !ctrl.value.isInitialized) return;
+    setState(() {
+      if (ctrl.value.isPlaying) {
+        ctrl.pause();
+        _showControls = true;
+        _hideControlsTimer?.cancel();
+      } else {
+        ctrl.play();
+        _restartHideControlsTimer();
+      }
+    });
+  }
+
+  String _fmtDuration(Duration d) {
+    final mins = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final secs = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    if (d.inHours > 0) return '${d.inHours}:$mins:$secs';
+    return '$mins:$secs';
   }
 
   Future<void> _toggleFullscreen() async {
@@ -523,6 +585,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
         ? widget.item['episodes'] as int
         : int.tryParse('${widget.item['episodes']}') ?? 12;
 
+    final isNativeReady = _videoCtrl != null && _videoCtrl!.value.isInitialized;
     final playerBox = Container(
       color: Colors.black,
       width: double.infinity,
@@ -534,7 +597,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
             child: IgnorePointer(
               ignoring: _locked,
               child: Center(
-                child: (_videoCtrl != null && _videoCtrl!.value.isInitialized)
+                child: isNativeReady
                     ? AspectRatio(
                         aspectRatio: _videoCtrl!.value.aspectRatio,
                         child: VideoPlayer(_videoCtrl!),
@@ -552,19 +615,262 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
               ),
             ),
           ),
-          if (_loading)
-            const CircularProgressIndicator(color: Color(0xFF38BDF8)),
-          if (!_locked)
-            Positioned(
-              top: 8,
-              left: 8,
-              right: 8,
+          if (isNativeReady && !_locked)
+            Positioned.fill(
               child: Row(
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white),
-                    onPressed: () {
-                      if (_isFullscreen) {
+                  Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: _toggleControlsVisibility,
+                      onDoubleTap: () => _seekRelative(-10),
+                    ),
+                  ),
+                  Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: _toggleControlsVisibility,
+                      onDoubleTap: () => _seekRelative(10),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (_seekOverlayText != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.72),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _seekOverlayText!.startsWith('+')
+                        ? Icons.forward_10_rounded
+                        : Icons.replay_10_rounded,
+                    color: const Color(0xFF38BDF8),
+                    size: 24,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    _seekOverlayText!,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
+                ],
+              ),
+            ),
+          if (_loading)
+            const CircularProgressIndicator(color: Color(0xFF38BDF8)),
+          if (!_locked && (_showControls || !isNativeReady))
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(4, 6, 6, 12),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.black.withOpacity(0.78), Colors.transparent],
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                      onPressed: () {
+                        if (_isFullscreen) {
+                          _toggleFullscreen();
+                        } else {
+                          Navigator.pop(context);
+                        }
+                      },
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '$title • Ep $_currentEp',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13.5),
+                          ),
+                          Text(
+                            _statusMsg,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 11, fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Kunci Layar',
+                      icon: const Icon(Icons.lock_open_rounded, color: Colors.white, size: 20),
+                      onPressed: () {
+                        _hideControlsTimer?.cancel();
+                        setState(() => _locked = true);
+                      },
+                    ),
+                    IconButton(
+                      tooltip: 'Layar Penuh',
+                      icon: Icon(
+                        _isFullscreen ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded,
+                        color: Colors.white,
+                        size: 22,
+                      ),
+                      onPressed: _toggleFullscreen,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (!_locked && _showControls && isNativeReady)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Material(
+                  color: Colors.black45,
+                  shape: const CircleBorder(),
+                  child: IconButton(
+                    iconSize: 30,
+                    color: Colors.white,
+                    icon: const Icon(Icons.replay_10_rounded),
+                    onPressed: () => _seekRelative(-10),
+                  ),
+                ),
+                const SizedBox(width: 24),
+                Material(
+                  color: const Color(0xFF38BDF8).withOpacity(0.9),
+                  shape: const CircleBorder(),
+                  child: IconButton(
+                    iconSize: 38,
+                    color: const Color(0xFF0A0E1A),
+                    icon: Icon(_videoCtrl!.value.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded),
+                    onPressed: _togglePlayPause,
+                  ),
+                ),
+                const SizedBox(width: 24),
+                Material(
+                  color: Colors.black45,
+                  shape: const CircleBorder(),
+                  child: IconButton(
+                    iconSize: 30,
+                    color: Colors.white,
+                    icon: const Icon(Icons.forward_10_rounded),
+                    onPressed: () => _seekRelative(10),
+                  ),
+                ),
+              ],
+            ),
+          if (!_locked && _showControls && isNativeReady)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(12, 10, 8, 6),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [Colors.black.withOpacity(0.82), Colors.transparent],
+                  ),
+                ),
+                child: ValueListenableBuilder<VideoPlayerValue>(
+                  valueListenable: _videoCtrl!,
+                  builder: (context, val, _) {
+                    final pos = val.position;
+                    final dur = val.duration;
+                    final maxMs = dur.inMilliseconds > 0 ? dur.inMilliseconds.toDouble() : 1.0;
+                    final curMs = pos.inMilliseconds.clamp(0, dur.inMilliseconds).toDouble();
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SliderTheme(
+                          data: SliderTheme.of(context).copyWith(
+                            trackHeight: 3,
+                            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                            overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                            activeTrackColor: const Color(0xFF38BDF8),
+                            inactiveTrackColor: Colors.white24,
+                            thumbColor: const Color(0xFF38BDF8),
+                          ),
+                          child: Slider(
+                            value: curMs,
+                            min: 0,
+                            max: maxMs,
+                            onChangeStart: (_) => _hideControlsTimer?.cancel(),
+                            onChanged: (v) => _videoCtrl!.seekTo(Duration(milliseconds: v.toInt())),
+                            onChangeEnd: (_) => _restartHideControlsTimer(),
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            Text(
+                              '${_fmtDuration(pos)} / ${_fmtDuration(dur)}',
+                              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                            ),
+                            const Spacer(),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(4)),
+                              child: Text(
+                                _quality,
+                                style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 10.5, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
+          if (_locked)
+            Positioned(
+              top: 12,
+              right: 12,
+              child: Material(
+                color: Colors.black.withOpacity(0.75),
+                borderRadius: BorderRadius.circular(24),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(24),
+                  onTap: () {
+                    setState(() {
+                      _locked = false;
+                      _showControls = true;
+                    });
+                    _restartHideControlsTimer();
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.lock_rounded, color: Color(0xFFFBBF24), size: 18),
+                        SizedBox(width: 6),
+                        Text(
+                          'Terkunci',
+                          style: TextStyle(color: Color(0xFFFBBF24), fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    if (_isFullscreen) {
                         _toggleFullscreen();
                       } else {
                         Navigator.pop(context);

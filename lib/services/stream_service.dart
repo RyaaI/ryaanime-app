@@ -4,10 +4,6 @@ import 'package:http/http.dart' as http;
 class StreamService {
   static const String baseUrl = 'http://191.222.39.242:3001';
   static const String resolverBaseUrl = 'http://191.222.39.226:30001';
-  static const List<String> providers = [
-    'oploverz',
-    'otakudesu',
-  ];
 
   static Future<Map<String, dynamic>?> _getJson(Uri uri, {int timeoutSec = 15}) async {
     try {
@@ -34,7 +30,24 @@ class StreamService {
     return null;
   }
 
-  static String? _pickOploverzFiledonUrl(dynamic downloadUrlObj, String quality, int serverIndex) {
+  static List<String> _expandQueries(List<String> rawCandidates) {
+    final out = List<String>.from([]);
+    void addUnique(String s) {
+      final clean = s.trim();
+      if (clean.length >= 3 && !out.contains(clean)) out.add(clean);
+    }
+    for (final raw in rawCandidates) {
+      addUnique(raw);
+      final noSeason = raw.replaceAll(RegExp(r'\b(Season|Part|Cour)\s*\d+.*\$', caseSensitive: false), '').trim();
+      addUnique(noSeason);
+      final words = noSeason.split(RegExp(r'\s+'));
+      if (words.length >= 3) addUnique(words.take(3).join(' '));
+      if (words.length >= 2) addUnique(words.take(2).join(' '));
+    }
+    return out;
+  }
+
+  static String? _pickOploverzFiledonUrl(dynamic downloadUrlObj, String quality) {
     if (downloadUrlObj is! Map) return null;
     final qualities = downloadUrlObj['qualities'];
     if (qualities is! List || qualities.isEmpty) return null;
@@ -51,50 +64,32 @@ class StreamService {
     final urlList = chosenQual?['urls'];
     if (urlList is! List || urlList.isEmpty) return null;
 
-    final filedonUrls = <String>[];
-    final otherUrls = <String>[];
     for (final u in urlList) {
       if (u is! Map) continue;
       final href = (u['url'] ?? '').toString().trim();
-      if (!href.startsWith('http')) continue;
-      if (href.contains('filedon.co')) {
-        filedonUrls.add(href);
-      } else {
-        otherUrls.add(href);
+      if (href.startsWith('http') && href.contains('filedon.co')) {
+        return href;
       }
     }
-
-    final pool = filedonUrls.isNotEmpty ? filedonUrls : otherUrls;
-    if (pool.isEmpty) return null;
-    return pool[serverIndex < pool.length ? serverIndex : 0];
+    return null;
   }
 
-  static Future<Map<String, dynamic>?> resolveEpisode({
-    required List<String> titleCandidates,
+  static Future<Map<String, dynamic>?> _fetchFromProvider({
+    required String provider,
+    required List<String> queries,
     required int episode,
-    String quality = '720p',
-    int serverIndex = 0,
-    String preferredProvider = 'oploverz',
+    required String quality,
   }) async {
-    final ordered = [
-      if (providers.contains(preferredProvider)) preferredProvider,
-      ...providers.where((p) => p != preferredProvider),
-    ];
+    for (final q in queries) {
+      final searchJson = await _getJson(
+        Uri.parse('$baseUrl/$provider/search?q=${Uri.encodeComponent(q)}'),
+      );
+      final animeList = searchJson?['data']?['animeList'];
+      if (animeList is! List || animeList.isEmpty) continue;
 
-    for (final provider in ordered) {
-      for (final rawQ in titleCandidates) {
-        final q = rawQ.trim();
-        if (q.length < 3) continue;
-
-        final searchJson = await _getJson(
-          Uri.parse('$baseUrl/$provider/search?q=${Uri.encodeComponent(q)}'),
-        );
-        final animeList = searchJson?['data']?['animeList'];
-        if (animeList is! List || animeList.isEmpty) continue;
-
-        final first = animeList.first;
-        if (first is! Map) continue;
-        final animeId = (first['animeId'] ?? '').toString().trim();
+      for (final candidate in animeList.take(3)) {
+        if (candidate is! Map) continue;
+        final animeId = (candidate['animeId'] ?? '').toString().trim();
         if (animeId.isEmpty) continue;
 
         final animeJson = await _getJson(
@@ -129,18 +124,21 @@ class StreamService {
 
         final downloadUrl = details['downloadUrl'];
         final qList = details['server']?['qualityList'];
-        String rawStreamUrl = '';
-        String serverLabel = provider.toUpperCase();
 
         if (provider == 'oploverz') {
-          final pickedFiledon = _pickOploverzFiledonUrl(downloadUrl, quality, serverIndex);
+          final pickedFiledon = _pickOploverzFiledonUrl(downloadUrl, quality);
           if (pickedFiledon != null) {
-            rawStreamUrl = pickedFiledon;
-            serverLabel = 'OPLOVERZ • $quality';
+            final directMp4 = await _resolveDirectMp4(pickedFiledon);
+            if (directMp4 != null && directMp4.isNotEmpty) {
+              return {
+                'url': directMp4,
+                'label': 'OPLOVERZ • $quality',
+                'provider': provider,
+                'downloadUrl': downloadUrl,
+              };
+            }
           }
-        }
-
-        if (rawStreamUrl.isEmpty && qList is List && qList.isNotEmpty) {
+        } else if (qList is List && qList.isNotEmpty) {
           Map? chosenQual;
           final qClean = quality.replaceAll('p', '');
           for (final item in qList) {
@@ -149,41 +147,88 @@ class StreamService {
               break;
             }
           }
-          chosenQual ??= qList.first is Map ? qList.first as Map : null;
+          if (chosenQual == null) {
+            chosenQual = (quality == '1080p' || quality == '720p')
+                ? (qList.last is Map ? qList.last as Map : null)
+                : (qList.first is Map ? qList.first as Map : null);
+          }
 
           final srvList = chosenQual?['serverList'];
           if (srvList is List && srvList.isNotEmpty) {
-            final picked = srvList[serverIndex < srvList.length ? serverIndex : 0];
-            if (picked is Map) {
-              final serverId = (picked['serverId'] ?? '').toString().trim();
-              final sTitle = (picked['title'] ?? 'Server').toString().trim();
-              if (serverId.isNotEmpty) {
-                final srvJson = await _getJson(
-                  Uri.parse('$baseUrl/$provider/server/${Uri.encodeComponent(serverId)}'),
-                );
-                final u = (srvJson?['data']?['details']?['url'] ?? '').toString().trim();
-                if (u.startsWith('http')) {
-                  rawStreamUrl = u;
-                  serverLabel = '${provider.toUpperCase()} • $sTitle';
-                }
+            final orderedServers = [
+              ...srvList.where((s) => s is Map && (s['title'] ?? '').toString().toLowerCase().contains('odstream')),
+              ...srvList.where((s) => s is Map && !(s['title'] ?? '').toString().toLowerCase().contains('odstream')),
+            ];
+            for (final srv in orderedServers.take(3)) {
+              if (srv is! Map) continue;
+              final serverId = (srv['serverId'] ?? '').toString().trim();
+              final sTitle = (srv['title'] ?? 'Server').toString().trim();
+              if (serverId.isEmpty) continue;
+              final srvJson = await _getJson(
+                Uri.parse('$baseUrl/$provider/server/${Uri.encodeComponent(serverId)}'),
+              );
+              final u = (srvJson?['data']?['details']?['url'] ?? '').toString().trim();
+              if (!u.startsWith('http')) continue;
+              final directMp4 = await _resolveDirectMp4(u);
+              if (directMp4 != null && directMp4.isNotEmpty) {
+                final actualRes = (chosenQual?['title'] ?? quality).toString().trim();
+                return {
+                  'url': directMp4,
+                  'label': 'OTAKUDESU • $actualRes ($sTitle)',
+                  'provider': provider,
+                  'downloadUrl': downloadUrl,
+                };
               }
             }
-          }
-        }
-
-        if (rawStreamUrl.isNotEmpty) {
-          final directMp4 = await _resolveDirectMp4(rawStreamUrl);
-          if (directMp4 != null && directMp4.isNotEmpty) {
-            return {
-              'url': directMp4,
-              'label': serverLabel,
-              'provider': provider,
-              'downloadUrl': downloadUrl,
-            };
           }
         }
       }
     }
     return null;
+  }
+
+  static Future<Map<String, dynamic>?> resolveEpisode({
+    required List<String> titleCandidates,
+    required int episode,
+    String quality = '720p',
+    int serverIndex = 0,
+    String preferredProvider = 'oploverz',
+  }) async {
+    final queries = _expandQueries(titleCandidates);
+
+    if (serverIndex == 1) {
+      return await _fetchFromProvider(
+        provider: 'otakudesu',
+        queries: queries,
+        episode: episode,
+        quality: quality == '1080p' ? '720p' : quality,
+      );
+    }
+    if (serverIndex == 2) {
+      return await _fetchFromProvider(
+        provider: 'otakudesu',
+        queries: queries,
+        episode: episode,
+        quality: '480p',
+      );
+    }
+
+    final firstPick = preferredProvider == 'otakudesu' ? 'otakudesu' : 'oploverz';
+    final secondPick = firstPick == 'oploverz' ? 'otakudesu' : 'oploverz';
+
+    final primary = await _fetchFromProvider(
+      provider: firstPick,
+      queries: queries,
+      episode: episode,
+      quality: quality,
+    );
+    if (primary != null) return primary;
+
+    return await _fetchFromProvider(
+      provider: secondPick,
+      queries: queries,
+      episode: episode,
+      quality: quality,
+    );
   }
 }

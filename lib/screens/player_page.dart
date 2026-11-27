@@ -37,6 +37,9 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
   bool _showControls = true;
   Timer? _hideControlsTimer;
   String? _seekOverlayText;
+  bool _showControls = true;
+  Timer? _hideControlsTimer;
+  String? _seekOverlayText;
   String _statusMsg = 'Memuat server...';
   String _activeStreamUrl = '';
   dynamic _downloadData;
@@ -417,6 +420,52 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
     return '$mins:$secs';
   }
 
+  void _restartHideControlsTimer() {
+    _hideControlsTimer?.cancel();
+    _hideControlsTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted && _videoCtrl != null && _videoCtrl!.value.isPlaying) {
+        setState(() => _showControls = false);
+      }
+    });
+  }
+  void _toggleControlsVisibility() {
+    if (_locked) return;
+    setState(() => _showControls = !_showControls);
+    if (_showControls) _restartHideControlsTimer();
+  }
+  Future<void> _seekRelative(int sec) async {
+    final c = _videoCtrl;
+    if (c == null || !c.value.isInitialized) return;
+    var t = c.value.position + Duration(seconds: sec);
+    if (t < Duration.zero) t = Duration.zero;
+    if (t > c.value.duration) t = c.value.duration;
+    await c.seekTo(t);
+    if (!mounted) return;
+    setState(() => _seekOverlayText = sec > 0 ? '+${sec}d' : '${sec}d');
+    _restartHideControlsTimer();
+    Future.delayed(const Duration(milliseconds: 700), () {
+      if (mounted && _seekOverlayText != null) setState(() => _seekOverlayText = null);
+    });
+  }
+  void _togglePlayPause() {
+    final c = _videoCtrl;
+    if (c == null || !c.value.isInitialized) return;
+    setState(() {
+      if (c.value.isPlaying) {
+        c.pause();
+        _showControls = true;
+        _hideControlsTimer?.cancel();
+      } else {
+        c.play();
+        _restartHideControlsTimer();
+      }
+    });
+  }
+  String _fmtDuration(Duration d) {
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final sec = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return d.inHours > 0 ? '${d.inHours}:$m:$sec' : '$m:$sec';
+  }
   Future<void> _toggleFullscreen() async {
     final wasPlaying = _videoCtrl != null &&
         _videoCtrl!.value.isInitialized &&
@@ -586,6 +635,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
         : int.tryParse('${widget.item['episodes']}') ?? 12;
 
     final isNativeReady = _videoCtrl != null && _videoCtrl!.value.isInitialized;
+    final ready = _videoCtrl != null && _videoCtrl!.value.isInitialized;
     final playerBox = Container(
       color: Colors.black,
       width: double.infinity,
@@ -597,191 +647,83 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
             child: IgnorePointer(
               ignoring: _locked,
               child: Center(
-                child: isNativeReady
-                    ? AspectRatio(
-                        aspectRatio: _videoCtrl!.value.aspectRatio,
-                        child: VideoPlayer(_videoCtrl!),
-                      )
+                child: ready
+                    ? AspectRatio(aspectRatio: _videoCtrl!.value.aspectRatio, child: VideoPlayer(_videoCtrl!))
                     : ((_useWebView && _webCtrl != null)
                         ? WebViewWidget(controller: _webCtrl!)
-                        : Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Text(
-                              _statusMsg,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(color: Colors.white70, fontSize: 13),
-                            ),
-                          )),
+                        : Padding(padding: const EdgeInsets.all(16), child: Text(_statusMsg, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontSize: 13)))),
               ),
             ),
           ),
-          if (isNativeReady && !_locked)
+          if (ready && !_locked)
             Positioned.fill(
               child: Row(
                 children: [
-                  Expanded(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onTap: _toggleControlsVisibility,
-                      onDoubleTap: () => _seekRelative(-10),
-                    ),
-                  ),
-                  Expanded(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onTap: _toggleControlsVisibility,
-                      onDoubleTap: () => _seekRelative(10),
-                    ),
-                  ),
+                  Expanded(child: GestureDetector(behavior: HitTestBehavior.translucent, onTap: _toggleControlsVisibility, onDoubleTap: () => _seekRelative(-10))),
+                  Expanded(child: GestureDetector(behavior: HitTestBehavior.translucent, onTap: _toggleControlsVisibility, onDoubleTap: () => _seekRelative(10))),
                 ],
               ),
             ),
           if (_seekOverlayText != null)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.72),
-                borderRadius: BorderRadius.circular(24),
-              ),
+              decoration: BoxDecoration(color: Colors.black.withOpacity(0.72), borderRadius: BorderRadius.circular(24)),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    _seekOverlayText!.startsWith('+')
-                        ? Icons.forward_10_rounded
-                        : Icons.replay_10_rounded,
-                    color: const Color(0xFF38BDF8),
-                    size: 24,
-                  ),
+                  Icon(_seekOverlayText!.startsWith('+') ? Icons.forward_10_rounded : Icons.replay_10_rounded, color: const Color(0xFF38BDF8), size: 24),
                   const SizedBox(width: 6),
-                  Text(
-                    _seekOverlayText!,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
-                  ),
+                  Text(_seekOverlayText!, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
                 ],
               ),
             ),
-          if (_loading)
-            const CircularProgressIndicator(color: Color(0xFF38BDF8)),
-          if (!_locked && (_showControls || !isNativeReady))
+          if (_loading) const CircularProgressIndicator(color: Color(0xFF38BDF8)),
+          if (!_locked && (_showControls || !ready))
             Positioned(
               top: 0,
               left: 0,
               right: 0,
               child: Container(
                 padding: const EdgeInsets.fromLTRB(4, 6, 6, 12),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Colors.black.withOpacity(0.78), Colors.transparent],
-                  ),
-                ),
+                decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.black.withOpacity(0.78), Colors.transparent])),
                 child: Row(
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back, color: Colors.white),
-                      onPressed: () {
-                        if (_isFullscreen) {
-                          _toggleFullscreen();
-                        } else {
-                          Navigator.pop(context);
-                        }
-                      },
-                    ),
+                    IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () { if (_isFullscreen) { _toggleFullscreen(); } else { Navigator.pop(context); } }),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            '$title • Ep $_currentEp',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13.5),
-                          ),
-                          Text(
-                            _statusMsg,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 11, fontWeight: FontWeight.w600),
-                          ),
+                          Text('$title • Ep $_currentEp', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13.5)),
+                          Text(_statusMsg, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 11, fontWeight: FontWeight.w600)),
                         ],
                       ),
                     ),
-                    IconButton(
-                      tooltip: 'Kunci Layar',
-                      icon: const Icon(Icons.lock_open_rounded, color: Colors.white, size: 20),
-                      onPressed: () {
-                        _hideControlsTimer?.cancel();
-                        setState(() => _locked = true);
-                      },
-                    ),
-                    IconButton(
-                      tooltip: 'Layar Penuh',
-                      icon: Icon(
-                        _isFullscreen ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded,
-                        color: Colors.white,
-                        size: 22,
-                      ),
-                      onPressed: _toggleFullscreen,
-                    ),
+                    IconButton(tooltip: 'Kunci Layar', icon: const Icon(Icons.lock_open_rounded, color: Colors.white, size: 20), onPressed: () { _hideControlsTimer?.cancel(); setState(() => _locked = true); }),
+                    IconButton(tooltip: 'Layar Penuh', icon: Icon(_isFullscreen ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded, color: Colors.white, size: 22), onPressed: _toggleFullscreen),
                   ],
                 ),
               ),
             ),
-          if (!_locked && _showControls && isNativeReady)
+          if (!_locked && _showControls && ready)
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Material(
-                  color: Colors.black45,
-                  shape: const CircleBorder(),
-                  child: IconButton(
-                    iconSize: 30,
-                    color: Colors.white,
-                    icon: const Icon(Icons.replay_10_rounded),
-                    onPressed: () => _seekRelative(-10),
-                  ),
-                ),
+                Material(color: Colors.black45, shape: const CircleBorder(), child: IconButton(iconSize: 30, color: Colors.white, icon: const Icon(Icons.replay_10_rounded), onPressed: () => _seekRelative(-10))),
                 const SizedBox(width: 24),
-                Material(
-                  color: const Color(0xFF38BDF8).withOpacity(0.9),
-                  shape: const CircleBorder(),
-                  child: IconButton(
-                    iconSize: 38,
-                    color: const Color(0xFF0A0E1A),
-                    icon: Icon(_videoCtrl!.value.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded),
-                    onPressed: _togglePlayPause,
-                  ),
-                ),
+                Material(color: const Color(0xFF38BDF8).withOpacity(0.9), shape: const CircleBorder(), child: IconButton(iconSize: 38, color: const Color(0xFF0A0E1A), icon: Icon(_videoCtrl!.value.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded), onPressed: _togglePlayPause)),
                 const SizedBox(width: 24),
-                Material(
-                  color: Colors.black45,
-                  shape: const CircleBorder(),
-                  child: IconButton(
-                    iconSize: 30,
-                    color: Colors.white,
-                    icon: const Icon(Icons.forward_10_rounded),
-                    onPressed: () => _seekRelative(10),
-                  ),
-                ),
+                Material(color: Colors.black45, shape: const CircleBorder(), child: IconButton(iconSize: 30, color: Colors.white, icon: const Icon(Icons.forward_10_rounded), onPressed: () => _seekRelative(10))),
               ],
             ),
-          if (!_locked && _showControls && isNativeReady)
+          if (!_locked && _showControls && ready)
             Positioned(
               left: 0,
               right: 0,
               bottom: 0,
               child: Container(
                 padding: const EdgeInsets.fromLTRB(12, 10, 8, 6),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [Colors.black.withOpacity(0.82), Colors.transparent],
-                  ),
-                ),
+                decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [Colors.black.withOpacity(0.82), Colors.transparent])),
                 child: ValueListenableBuilder<VideoPlayerValue>(
                   valueListenable: _videoCtrl!,
                   builder: (context, val, _) {
@@ -793,38 +735,14 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         SliderTheme(
-                          data: SliderTheme.of(context).copyWith(
-                            trackHeight: 3,
-                            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                            overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-                            activeTrackColor: const Color(0xFF38BDF8),
-                            inactiveTrackColor: Colors.white24,
-                            thumbColor: const Color(0xFF38BDF8),
-                          ),
-                          child: Slider(
-                            value: curMs,
-                            min: 0,
-                            max: maxMs,
-                            onChangeStart: (_) => _hideControlsTimer?.cancel(),
-                            onChanged: (v) => _videoCtrl!.seekTo(Duration(milliseconds: v.toInt())),
-                            onChangeEnd: (_) => _restartHideControlsTimer(),
-                          ),
+                          data: SliderTheme.of(context).copyWith(trackHeight: 3, thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6), overlayShape: const RoundSliderOverlayShape(overlayRadius: 12), activeTrackColor: const Color(0xFF38BDF8), inactiveTrackColor: Colors.white24, thumbColor: const Color(0xFF38BDF8)),
+                          child: Slider(value: curMs, min: 0, max: maxMs, onChangeStart: (_) => _hideControlsTimer?.cancel(), onChanged: (v) => _videoCtrl!.seekTo(Duration(milliseconds: v.toInt())), onChangeEnd: (_) => _restartHideControlsTimer()),
                         ),
                         Row(
                           children: [
-                            Text(
-                              '${_fmtDuration(pos)} / ${_fmtDuration(dur)}',
-                              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
-                            ),
+                            Text('${_fmtDuration(pos)} / ${_fmtDuration(dur)}', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
                             const Spacer(),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(4)),
-                              child: Text(
-                                _quality,
-                                style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 10.5, fontWeight: FontWeight.bold),
-                              ),
-                            ),
+                            Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(4)), child: Text(_quality, style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 10.5, fontWeight: FontWeight.bold))),
                           ],
                         ),
                       ],
@@ -842,13 +760,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
                 borderRadius: BorderRadius.circular(24),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(24),
-                  onTap: () {
-                    setState(() {
-                      _locked = false;
-                      _showControls = true;
-                    });
-                    _restartHideControlsTimer();
-                  },
+                  onTap: () { setState(() { _locked = false; _showControls = true; }); _restartHideControlsTimer(); },
                   child: const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     child: Row(
@@ -856,10 +768,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
                       children: [
                         Icon(Icons.lock_rounded, color: Color(0xFFFBBF24), size: 18),
                         SizedBox(width: 6),
-                        Text(
-                          'Terkunci',
-                          style: TextStyle(color: Color(0xFFFBBF24), fontSize: 12, fontWeight: FontWeight.bold),
-                        ),
+                        Text('Terkunci', style: TextStyle(color: Color(0xFFFBBF24), fontSize: 12, fontWeight: FontWeight.bold)),
                       ],
                     ),
                   ),
@@ -869,54 +778,6 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
         ],
       ),
     );
-
-    if (_isFullscreen) {
-                        _toggleFullscreen();
-                      } else {
-                        Navigator.pop(context);
-                      }
-                    },
-                  ),
-                  Expanded(
-                    child: Text(
-                      '$title • Ep $_currentEp',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        shadows: [Shadow(blurRadius: 6, color: Colors.black)],
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.lock_open,
-                        color: Colors.white, size: 20),
-                    onPressed: () => setState(() => _locked = true),
-                  ),
-                  IconButton(
-                    icon: Icon(
-                      _isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
-                      color: Colors.white,
-                    ),
-                    onPressed: _toggleFullscreen,
-                  ),
-                ],
-              ),
-            )
-          else
-            Positioned(
-              top: 10,
-              right: 10,
-              child: IconButton(
-                icon: const Icon(Icons.lock, color: Color(0xFFFBBF24)),
-                onPressed: () => setState(() => _locked = false),
-              ),
-            ),
-        ],
-      ),
-    );
-
     if (_isFullscreen) {
       return Scaffold(
         backgroundColor: Colors.black,

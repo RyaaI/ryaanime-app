@@ -957,15 +957,15 @@ class _ProfileModalState extends State<_ProfileModal> {
     if (TempestStore.verifyOwnerSecret(_secretCtrl.text)) {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('is_owner', true);
-      await prefs.setString('active_border', 'b_owner');
-      await prefs.setString('active_bg', 'bg_owner');
+      await prefs.setString('active_border', 'b_owner_starlight');
+      await prefs.setString('active_bg', 'bg_owner_starlight');
       await SessionManager.persistActiveProfile();
       await widget.onChanged();
       if (!mounted) return;
       setState(() {
         _owner = true;
-        _border = 'b_owner';
-        _bg = 'bg_owner';
+        _border = 'b_owner_starlight';
+        _bg = 'bg_owner_starlight';
       });
       _secretCtrl.clear();
       ScaffoldMessenger.of(context).showSnackBar(

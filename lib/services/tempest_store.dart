@@ -39,6 +39,7 @@ class TempestStore {
     'b_divinity': {'name': 'Sovereign Divinity (Rank SS)', 'c1': 0xFFFDE047, 'c2': 0xFF38BDF8, 'glow': true},
     'b_nihility': {'name': 'Nihility Abyssal Crown (Rank EX)', 'c1': 0xFFF472B6, 'c2': 0xFF8B5CF6, 'glow': true},
     'b_owner': {'name': 'Sovereign Founder (OWNER)', 'c1': 0xFFFBBF24, 'c2': 0xFF38BDF8, 'glow': true},
+    'b_owner_starlight': {'name': 'Starlight Rose Nova (OWNER)', 'c1': 0xFFFF5CA8, 'c2': 0xFF38BDF8, 'glow': true, 'anim': true},
   };
 
   static final Map<String, Map<String, dynamic>> backgrounds = {
@@ -50,6 +51,7 @@ class TempestStore {
     'bg_sovereign': {'name': 'Tempest Sovereign (Rank SS)', 'c1': 0xFF422006, 'c2': 0xFF0C4A6E, 'border': 0xFFFBBF24, 'tag': 'SOVEREIGN'},
     'bg_turnnull': {'name': 'Ciel & Rimuru: Turn Null (Rank EX)', 'c1': 0xFF4A044E, 'c2': 0xFF082F49, 'border': 0xFFF472B6, 'tag': 'TURN NULL'},
     'bg_owner': {'name': 'Imperial Throne (OWNER)', 'c1': 0xFF3B2804, 'c2': 0xFF091E3A, 'border': 0xFFFBBF24, 'tag': 'FOUNDER • OWNER'},
+    'bg_owner_starlight': {'name': 'Starlight Velvet Dusk - Pink Flame (OWNER)', 'c1': 0xFFF472B6, 'c2': 0xFFC084FC, 'border': 0xFFFF85C0, 'tag': 'STARLIGHT • OWNER', 'anim': true},
   };
 
   static Widget buildAvatar(String path, String borderId,
@@ -68,7 +70,21 @@ class TempestStore {
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        Container(
+        (borderId == 'b_owner_starlight' || b['anim'] == true)
+            ? AnimatedOwnerRing(
+                c1: c1,
+                c2: c2,
+                child: CircleAvatar(
+            radius: radius,
+            key: ValueKey('${path}_${path.isNotEmpty && File(path).existsSync() ? File(path).lengthSync() : 0}'),
+          backgroundColor: const Color(0xFF0B1120),
+            backgroundImage: img,
+            child: img == null
+                ? Icon(Icons.water_drop, size: radius, color: c1)
+                : null,
+          ),
+              )
+            : Container(
           padding: const EdgeInsets.all(2.6),
           decoration: BoxDecoration(
             shape: BoxShape.circle,
@@ -318,5 +334,178 @@ class SessionManager {
     await persistActiveProfile();
     await prefs.setBool('logged_in', false);
     await prefs.remove(_activeUserKey);
+  }
+}
+
+class AnimatedOwnerRing extends StatefulWidget {
+  final Color c1;
+  final Color c2;
+  final Widget child;
+
+  const AnimatedOwnerRing({
+    super.key,
+    required this.c1,
+    required this.c2,
+    required this.child,
+  });
+
+  @override
+  State<AnimatedOwnerRing> createState() => _AnimatedOwnerRingState();
+}
+
+class _AnimatedOwnerRingState extends State<AnimatedOwnerRing>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 3000),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (_, __) {
+        final angle = _ctrl.value * 6.2831853;
+        final wave = 0.5 + 0.5 * (1.0 - (2.0 * _ctrl.value - 1.0).abs());
+        return Container(
+          padding: const EdgeInsets.all(3.0),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: SweepGradient(
+              colors: [
+                widget.c1,
+                const Color(0xFFFFB3D9),
+                widget.c2,
+                const Color(0xFFFDE68A),
+                widget.c1,
+              ],
+              transform: GradientRotation(angle),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: widget.c1.withOpacity(0.6 + wave * 0.25),
+                blurRadius: 10 + wave * 5,
+                spreadRadius: 1.0 + wave * 0.8,
+              ),
+            ],
+          ),
+          child: widget.child,
+        );
+      },
+    );
+  }
+}
+
+class AnimatedOwnerCommentCard extends StatefulWidget {
+  final Color c1;
+  final Color c2;
+  final Color borderCol;
+  final Widget child;
+
+  const AnimatedOwnerCommentCard({
+    super.key,
+    required this.c1,
+    required this.c2,
+    required this.borderCol,
+    required this.child,
+  });
+
+  @override
+  State<AnimatedOwnerCommentCard> createState() =>
+      _AnimatedOwnerCommentCardState();
+}
+
+class _AnimatedOwnerCommentCardState extends State<AnimatedOwnerCommentCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2800),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (_, __) {
+        final t = _ctrl.value;
+        final wave = 0.5 + 0.5 * (1.0 - (2.0 * t - 1.0).abs());
+        return Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment(-0.8 + t * 0.5, -1.0),
+              end: Alignment(0.8, 1.0 - t * 0.4),
+              colors: [
+                const Color(0xFF9D174D),
+                const Color(0xFFDB2777),
+                const Color(0xFF9333EA),
+                const Color(0xFFF472B6),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: Color.lerp(
+                widget.borderCol,
+                const Color(0xFFFFD1E8),
+                wave,
+              )!,
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFFF5CA8).withOpacity(0.32 + wave * 0.25),
+                blurRadius: 12 + wave * 5,
+                spreadRadius: 0.5 + wave * 0.6,
+              ),
+            ],
+          ),
+          child: Stack(
+            children: [
+              Positioned(
+                right: 6,
+                bottom: 0,
+                child: Opacity(
+                  opacity: 0.35 + wave * 0.35,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(
+                        Icons.local_fire_department,
+                        size: 16,
+                        color: Color(0xFFFFB3D9),
+                      ),
+                      Icon(
+                        Icons.local_fire_department,
+                        size: 20,
+                        color: Color(0xFFFF5CA8),
+                      ),
+                      Icon(
+                        Icons.auto_awesome,
+                        size: 14,
+                        color: Color(0xFFFDE68A),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              widget.child,
+            ],
+          ),
+        );
+      },
+    );
   }
 }

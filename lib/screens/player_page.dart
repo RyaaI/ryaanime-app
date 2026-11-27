@@ -327,6 +327,16 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
       } catch (_) {}
     }
 
+    final urlLower = url.toLowerCase();
+    if (urlLower.contains('invalidargument') || urlLower.contains('<error>')) {
+      if (!mounted || token != _loadToken) return;
+      setState(() {
+        _loading = false;
+        _useWebView = false;
+        _statusMsg = 'Sumber stream sedang bermasalah (XML error). Coba server lain.';
+      });
+      return;
+    }
     final initialHost = Uri.tryParse(url)?.host ?? '';
     final wv = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -1042,33 +1052,40 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
         c1: c1,
         c2: c2,
         borderCol: borderCol,
-        child: Text(
-                          tag,
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                            color: borderCol,
-                          ),
-                        ),
-                      ),
-                  ],
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (tag.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.only(bottom: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: borderCol.withOpacity(0.25),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: borderCol, width: 1),
                 ),
-                Text(
-                  (c['rankTitle'] ?? 'Unique Slime').toString(),
-                  style: const TextStyle(fontSize: 10, color: Colors.white60),
+                child: Text(
+                  tag,
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    color: borderCol,
+                  ),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  (c['text'] ?? '').toString(),
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                ),
-              ],
+              ),
+            Text(
+              (c['rankTitle'] ?? 'Unique Slime').toString(),
+              style: const TextStyle(fontSize: 10, color: Colors.white60),
             ),
-          ),
-        ],
-      ),
-    ),
-      );
+            const SizedBox(height: 6),
+            Text(
+              (c['text'] ?? '').toString(),
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+            ),
+          ],
+        ),
+      )))))))
     }
     return Container(
       margin: const EdgeInsets.only(bottom: 10),

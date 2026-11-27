@@ -23,7 +23,7 @@ class _PlayScreenState extends State<PlayScreen> {
   String _username = 'Warga Tempest';
 
   final TextEditingController _commentController = TextEditingController();
-  final List> _comments = [
+  final List<Map<String, String>> _comments = [
     {
       'author': 'Rimuru Tempest',
       'badge': 'FEDERASI TEMPEST',

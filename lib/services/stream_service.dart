@@ -324,7 +324,7 @@ static List<String> _expandQueries(List<String> rawCandidates) {
         .toList();
   }
 
-  static Future<List>> _searchSingleRouter(
+  static Future<List<Map<String, dynamic>>> _searchSingleRouter(
     String provider,
     String query,
   ) async {
@@ -343,7 +343,7 @@ static List<String> _expandQueries(List<String> rawCandidates) {
 
     final qTokens = _tokenizeTitle(cleanQ);
     final qLower = cleanQ.toLowerCase();
-    final List> out = [];
+    final List<Map<String, dynamic>> out = [];
 
     for (final item in rawList) {
       if (item is! Map) continue;
@@ -388,14 +388,14 @@ static List<String> _expandQueries(List<String> rawCandidates) {
   }
 
   // Mencari langsung di kedua router: oploverz dan otakudesu
-  static Future<List>> searchBothRouters(
+  static Future<List<Map<String, dynamic>>> searchBothRouters(
     String query,
   ) async {
     final cleanQ = query.trim();
     if (cleanQ.isEmpty) return [];
 
-    List> oploverzRes = [];
-    List> otakudesuRes = [];
+    List<Map<String, dynamic>> oploverzRes = [];
+    List<Map<String, dynamic>> otakudesuRes = [];
 
     try {
       oploverzRes = await _searchSingleRouter('oploverz', cleanQ)
@@ -407,7 +407,7 @@ static List<String> _expandQueries(List<String> rawCandidates) {
           .timeout(const Duration(seconds: 7), onTimeout: () => []);
     } catch (_) {}
 
-    final merged = >[];
+    final merged = <Map<String, dynamic>>[];
     final seen = <String>{};
 
     // Selang-seling agar hasil kedua router terwakili seimbang
@@ -432,7 +432,7 @@ static List<String> _expandQueries(List<String> rawCandidates) {
 
   // 2 server utama: index 0 -> oploverz dulu (fallback otakudesu), index 1 -> otakudesu dulu (fallback oploverz)
   // Semua pilihan kualitas ('360p', '480p', '720p', '1080p') diteruskan langsung ke provider
-  static Future?> resolveEpisode({
+  static Future<Map<String, dynamic>?> resolveEpisode({
     required List<String> titleCandidates,
     required int episode,
     String quality = '720p',

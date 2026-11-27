@@ -25,7 +25,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _level = 1;
   int _exp = 0;
   String _searchQuery = '';
-  List> _routerSearchResults = const [];
+  List<Map<String, dynamic>> _routerSearchResults = const [];
   bool _isSearchingRouter = false;
   Timer? _searchDebounce;
   int _searchToken = 0;
@@ -40,7 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
     'Isekai',
   ];
 
-  final List> _catalog = const [
+  final List<Map<String, String>> _catalog = const [
     {
       'title': 'Tensei Shitara Slime Datta Ken',
       'episode': 'Episode 24',

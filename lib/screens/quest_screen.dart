@@ -22,7 +22,7 @@ class _QuestScreenState extends State<QuestScreen> {
   int _exp = 0;
   final Set<String> _claimedIds = {};
 
-  final List> _quests = const [
+  final List<Map<String, dynamic>> _quests = const [
     {
       'id': 'q1',
       'title': 'Menjelajah Gerbang Tempest',
@@ -43,14 +43,14 @@ class _QuestScreenState extends State<QuestScreen> {
     },
   ];
 
-  final List> _borders = const [
+  final List<Map<String, dynamic>> _borders = const [
     {'name': 'Slime Cyan', 'color': Color(0xFF38BDF8)},
     {'name': 'Rimuru Aura', 'color': Color(0xFF5EEAD4)},
     {'name': 'Veldora Storm', 'color': Color(0xFFFACC15)},
     {'name': 'Milim Starlight', 'color': Color(0xFFF472B6)},
   ];
 
-  final List> _commentBackgrounds = const [
+  final List<Map<String, dynamic>> _commentBackgrounds = const [
     {
       'name': 'Tempest Cyan',
       'start': Color(0xFF0E4A6E),

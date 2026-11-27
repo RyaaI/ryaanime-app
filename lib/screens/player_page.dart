@@ -194,32 +194,12 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
     return int.tryParse('$raw') ?? 12;
   }
 
-    void _prefetchNextEpisode() {
-    final nextEp = _currentEp + 1;
-    final totalEp = _getTotalEpisodesSafe();
-    if (nextEp <= 1 || nextEp > totalEp || _prefetchedEp == nextEp) return;
-    _prefetchedEp = nextEp;
-    final titles = <String>[
-      if (widget.title.trim().isNotEmpty) widget.title.trim(),
-      if ((_animeTitle ?? '').trim().isNotEmpty) _animeTitle!.trim(),
-    ];
-    if (titles.isEmpty) return;
-    StreamService.resolveEpisode(
-      titleCandidates: titles,
-      episode: nextEp,
-      quality: _quality,
-      serverIndex: _serverIndex,
-      preferredProvider: _preferredProvider,
-    ).catchError((_) => null);
-  }
-
   Future<void> _switchToEpisode(int ep) async {
     final maxEp = _getTotalEpisodesSafe();
     if (ep < 1 || ep > maxEp || ep == _currentEp) return;
     if (!mounted) return;
     setState(() {
       _currentEp = ep;
-    _prefetchNextEpisode();
       _watchedSeconds = 0;
       _actualWatchedSeconds = 0;
       _lastVideoPosSec = null;
@@ -754,7 +734,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
                         IconButton(
                           visualDensity: VisualDensity.compact,
                           icon: Icon(
-                            _autoPlayNext ? Icons.autoplay : Icons.play_disabled,
+                            _autoPlayNext ? Icons.autorenew : Icons.play_disabled,
                             color: _autoPlayNext ? const Color(0xFFFF85C0) : Colors.white54,
                           ),
                           onPressed: () => setState(() => _autoPlayNext = !_autoPlayNext),
@@ -1047,46 +1027,75 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
     final borderCol = Color(bg['border'] as int);
     final tag = (bg['tag'] ?? '').toString();
 
+    final cardContent = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TempestStore.buildAvatar(
+          (c['avatar'] ?? '').toString(),
+          (c['border'] ?? 'b_slime').toString(),
+          radius: 18,
+          isOwner: c['isOwner'] == true,
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    (c['user'] ?? 'Warga Tempest').toString(),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      fontSize: 13,
+                    ),
+                  ),
+                  if (tag.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: borderCol.withOpacity(0.25),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: borderCol, width: 1),
+                      ),
+                      child: Text(
+                        tag,
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          color: borderCol,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              Text(
+                (c['rankTitle'] ?? 'Unique Slime').toString(),
+                style: const TextStyle(fontSize: 10, color: Colors.white60),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                (c['text'] ?? '').toString(),
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+
     if (bg['anim'] == true) {
       return AnimatedOwnerCommentCard(
         c1: c1,
         c2: c2,
         borderCol: borderCol,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (tag.isNotEmpty)
-              Container(
-                margin: const EdgeInsets.only(bottom: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(
-                  color: borderCol.withOpacity(0.25),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: borderCol, width: 1),
-                ),
-                child: Text(
-                  tag,
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                    color: borderCol,
-                  ),
-                ),
-              ),
-            Text(
-              (c['rankTitle'] ?? 'Unique Slime').toString(),
-              style: const TextStyle(fontSize: 10, color: Colors.white60),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              (c['text'] ?? '').toString(),
-              style: const TextStyle(color: Colors.white, fontSize: 13),
-            ),
-          ],
-        ),
-      )))))))
+        child: cardContent,
+      );
     }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
@@ -1095,66 +1104,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: borderCol, width: 1.2),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TempestStore.buildAvatar(
-            (c['avatar'] ?? '').toString(),
-            (c['border'] ?? 'b_slime').toString(),
-            radius: 18,
-            isOwner: c['isOwner'] == true,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  spacing: 6,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text(
-                      (c['user'] ?? 'Warga Tempest').toString(),
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        fontSize: 13,
-                      ),
-                    ),
-                    if (tag.isNotEmpty)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: borderCol.withOpacity(0.25),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: borderCol),
-                        ),
-                        child: Text(
-                          tag,
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                            color: borderCol,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                Text(
-                  (c['rankTitle'] ?? 'Unique Slime').toString(),
-                  style: const TextStyle(fontSize: 10, color: Colors.white60),
-                ,
-                const SizedBox(height: 6),
-                Text(
-                  (c['text'] ?? '').toString(),
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                ,
-              ],
-            ,
-          ,
-        ],
-      ,
-    ;
+      child: cardContent,
+    );
   }
 }

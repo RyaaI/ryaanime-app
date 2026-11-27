@@ -9,7 +9,7 @@ class StreamService {
     'otakudesu',
   ];
 
-  static Future?> _getJson(Uri uri, {int timeoutSec = 15}) async {
+  static Future<Map<String, dynamic>?> _getJson(Uri uri, {int timeoutSec = 15}) async {
     try {
       final res = await http.get(uri).timeout(Duration(seconds: timeoutSec));
       if (res.statusCode >= 200 && res.statusCode < 300) {
@@ -69,7 +69,7 @@ class StreamService {
     return pool[serverIndex < pool.length ? serverIndex : 0];
   }
 
-  static Future?> resolveEpisode({
+  static Future<Map<String, dynamic>?> resolveEpisode({
     required List<String> titleCandidates,
     required int episode,
     String quality = '720p',

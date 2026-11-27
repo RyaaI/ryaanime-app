@@ -315,7 +315,124 @@ static List<String> _expandQueries(List<String> rawCandidates) {
     return null;
   }
 
-  static Future<Map<String, dynamic>?> resolveEpisode({
+  static List<String> _tokenizeTitle(String text) {
+    return text
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+        .split(RegExp(r'\s+'))
+        .where((w) => w.length >= 2)
+        .toList();
+  }
+
+  static Future<List>> _searchSingleRouter(
+    String provider,
+    String query,
+  ) async {
+    final cleanQ = query.trim();
+    if (cleanQ.isEmpty) return [];
+
+    final uri = Uri.parse(
+      '$baseUrl/$provider/search?q=${Uri.encodeComponent(cleanQ)}',
+    );
+    final json = await _getJson(uri, timeoutSec: 6);
+    final data = json?['data'];
+    if (data is! Map) return [];
+
+    final rawList = data['animeList'] ?? data['searchList'] ?? data['results'];
+    if (rawList is! List) return [];
+
+    final qTokens = _tokenizeTitle(cleanQ);
+    final qLower = cleanQ.toLowerCase();
+    final List> out = [];
+
+    for (final item in rawList) {
+      if (item is! Map) continue;
+      final title = (item['title'] ?? item['seriesName'] ?? '').toString().trim();
+      final animeId = (item['animeId'] ?? item['id'] ?? item['slug'] ?? '')
+          .toString()
+          .trim();
+      if (title.isEmpty || animeId.isEmpty) continue;
+
+      final titleLower = title.toLowerCase();
+      final titleTokens = _tokenizeTitle(title).toSet();
+
+      int score = 0;
+      if (titleLower.contains(qLower)) score += 10;
+      if (qTokens.isNotEmpty) {
+        final hits = qTokens.where((t) => titleTokens.contains(t)).length;
+        if (hits == 0 && !titleLower.contains(qLower)) continue;
+        score += hits * 3;
+      }
+
+      final poster = (item['poster'] ?? item['thumb'] ?? item['img'] ?? '')
+          .toString()
+          .trim();
+      final epText = (item['episodes'] ?? item['episode'] ?? item['status'] ?? '')
+          .toString()
+          .trim();
+
+      out.add({
+        'title': title,
+        'animeId': animeId,
+        'source': provider,
+        'poster': poster,
+        'episode': epText.isEmpty ? 'Tersedia' : epText,
+        '_score': score,
+      });
+    }
+
+    out.sort(
+      (a, b) => ((b['_score'] as int?) ?? 0).compareTo((a['_score'] as int?) ?? 0),
+    );
+    return out;
+  }
+
+  // Mencari langsung di kedua router: oploverz dan otakudesu
+  static Future<List>> searchBothRouters(
+    String query,
+  ) async {
+    final cleanQ = query.trim();
+    if (cleanQ.isEmpty) return [];
+
+    List> oploverzRes = [];
+    List> otakudesuRes = [];
+
+    try {
+      oploverzRes = await _searchSingleRouter('oploverz', cleanQ)
+          .timeout(const Duration(seconds: 7), onTimeout: () => []);
+    } catch (_) {}
+
+    try {
+      otakudesuRes = await _searchSingleRouter('otakudesu', cleanQ)
+          .timeout(const Duration(seconds: 7), onTimeout: () => []);
+    } catch (_) {}
+
+    final merged = >[];
+    final seen = <String>{};
+
+    // Selang-seling agar hasil kedua router terwakili seimbang
+    final maxLen = oploverzRes.length > otakudesuRes.length
+        ? oploverzRes.length
+        : otakudesuRes.length;
+    for (int i = 0; i < maxLen; i++) {
+      for (final bucket in [oploverzRes, otakudesuRes]) {
+        if (i < bucket.length) {
+          final item = Map<String, dynamic>.from(bucket[i]);
+          final key =
+              '${item['source']}_${item['animeId']}_${(item['title'] as String).toLowerCase()}';
+          if (seen.add(key)) {
+            item.remove('_score');
+            merged.add(item);
+          }
+        }
+      }
+    }
+    return merged;
+  }
+
+  // 2 server utama: index 0 -> oploverz dulu (fallback otakudesu), index 1 -> otakudesu dulu (fallback oploverz)
+  // Semua pilihan kualitas ('360p', '480p', '720p', '1080p') diteruskan langsung ke provider
+  static Future?> resolveEpisode({
     required List<String> titleCandidates,
     required int episode,
     String quality = '720p',
@@ -323,54 +440,41 @@ static List<String> _expandQueries(List<String> rawCandidates) {
     String preferredProvider = 'oploverz',
   }) async {
     final queries = _expandQueries(titleCandidates);
+    final allowedQualities = {'360p', '480p', '720p', '1080p'};
+    final cleanQuality = allowedQualities.contains(quality) ? quality : '720p';
 
-    if (serverIndex == 1) {
-      return await _fetchFromProvider(
-        provider: 'otakudesu',
-        queries: queries,
-        episode: episode,
-        quality: quality == '1080p' ? '720p' : quality,
-      );
+    final String firstPick;
+    if (serverIndex == 0) {
+      firstPick = 'oploverz';
+    } else if (serverIndex == 1) {
+      firstPick = 'otakudesu';
+    } else {
+      firstPick = preferredProvider == 'otakudesu' ? 'otakudesu' : 'oploverz';
     }
-    if (serverIndex == 2) {
-      return await _fetchFromProvider(
-        provider: 'otakudesu',
-        queries: queries,
-        episode: episode,
-        quality: '480p',
-      );
-    }
-
-    final firstPick = preferredProvider == 'otakudesu' ? 'otakudesu' : 'oploverz';
-    final secondPick = firstPick == 'oploverz' ? 'otakudesu' : 'oploverz';
+    final String secondPick = firstPick == 'oploverz' ? 'otakudesu' : 'oploverz';
 
     bool hasValidStream(Map<String, dynamic>? m) {
       if (m == null) return false;
       final u = (m['streamUrl'] ?? m['url'] ?? m['directUrl'] ?? '').toString().trim();
       return u.startsWith('http');
     }
-    final f1 = _fetchFromProvider(
+
+    final r1 = await _fetchFromProvider(
       provider: firstPick,
       queries: queries,
       episode: episode,
-      quality: quality,
-    );
-    final f2 = _fetchFromProvider(
+      quality: cleanQuality,
+    ).timeout(const Duration(seconds: 6), onTimeout: () => null);
+    if (hasValidStream(r1)) return r1;
+
+    final r2 = await _fetchFromProvider(
       provider: secondPick,
       queries: queries,
       episode: episode,
-      quality: quality,
-    );
-    Map<String, dynamic>? r1;
-    Map<String, dynamic>? r2;
-    try {
-      r1 = await f1.timeout(const Duration(seconds: 4));
-    } catch (_) {}
-    if (hasValidStream(r1)) return r1;
-    try {
-      r2 = await f2.timeout(const Duration(seconds: 4));
-    } catch (_) {}
+      quality: cleanQuality,
+    ).timeout(const Duration(seconds: 6), onTimeout: () => null);
     if (hasValidStream(r2)) return r2;
+
     return r1 ?? r2;
   }
 }

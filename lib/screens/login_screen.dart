@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/tempest_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -40,15 +41,13 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     setState(() => _isSubmitting = true);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('username', username);
-    if (secretCode.isNotEmpty) {
-      await prefs.setString('secret_code', secretCode);
-    }
-
+    final err = _isRegisterMode
+        ? await TempestStore.register(username: username, password: password, specialCode: secretCode)
+        : await TempestStore.login(username: username, password: password, specialCode: secretCode);
     if (!mounted) return;
     setState(() => _isSubmitting = false);
-    Navigator.of(context).pushReplacementNamed('/');
+    if (err != null) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err))); return; }
+    Navigator.of(context).pushReplacementNamed('/main');
   }
 
   @override

@@ -48,6 +48,7 @@ class _QuestScreenState extends State<QuestScreen> {
     {'name': 'Rimuru Aura', 'color': Color(0xFF5EEAD4)},
     {'name': 'Veldora Storm', 'color': Color(0xFFFACC15)},
     {'name': 'Milim Starlight', 'color': Color(0xFFF472B6)},
+    {'name': 'Milim Starlight Wing', 'color': Color(0xFFFF5D8F)},
   ];
 
   final List<Map<String, dynamic>> _commentBackgrounds = const [
@@ -67,7 +68,8 @@ class _QuestScreenState extends State<QuestScreen> {
       'end': Color(0xFF1E3A5F),
     },
     {
-      'name': 'Storm Gold',
+      'name': 'Abyssal Gaze', 'start': Color(0xFF150A24), 'end': Color(0xFF3B0D44)},
+    {'name': 'Storm Gold',
       'start': Color(0xFF6B4E16),
       'end': Color(0xFF14354C),
     },

@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import '../services/tempest_store.dart';
+import '../widgets/milim_cosmetics.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'login_screen.dart';
@@ -17,6 +19,8 @@ class _MenuScreenState extends State<MenuScreen> {
   final TextEditingController _nameController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
   String _avatarPath = '';
+  String _activeBorder = 'Slime Cyan';
+  bool _hasSpecialCode = false;
   bool _isSaving = false;
 
   @override
@@ -37,6 +41,8 @@ class _MenuScreenState extends State<MenuScreen> {
     setState(() {
       _nameController.text = prefs.getString('username') ?? 'Warga Tempest';
       _avatarPath = prefs.getString('avatar_path') ?? '';
+      _activeBorder = prefs.getString('active_border') ?? 'Slime Cyan';
+      _hasSpecialCode = prefs.getBool('has_special_code') ?? false;
     });
   }
 
@@ -72,7 +78,7 @@ class _MenuScreenState extends State<MenuScreen> {
 
   Future<void> _logout() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('username');
+    await TempestStore.logout();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -125,10 +131,17 @@ class _MenuScreenState extends State<MenuScreen> {
                   ),
                 ),
                 const SizedBox(height: 14),
+                if (_hasSpecialCode) ...[
+                  const MilimTitleBadge(title: 'MilimNava', fontSize: 13),
+                  const SizedBox(height: 10),
+                ],
                 InkWell(
                   onTap: _pickAvatarFromGallery,
                   borderRadius: BorderRadius.circular(50),
-                  child: Container(
+                  child: MilimAvatarFrame(
+                    size: 82,
+                    enabled: _activeBorder == 'Milim Starlight Wing',
+                    child: Container(
                     width: 82,
                     height: 82,
                     padding: const EdgeInsets.all(3),
@@ -152,6 +165,7 @@ class _MenuScreenState extends State<MenuScreen> {
                               fit: BoxFit.contain,
                             ),
                     ),
+                  ),
                   ),
                 ),
                 const SizedBox(height: 8),

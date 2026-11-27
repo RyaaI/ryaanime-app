@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import '../widgets/milim_cosmetics.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/stream_service.dart';
 
@@ -22,6 +23,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String _username = 'Warga Tempest';
   String _avatarPath = '';
   String _activeBorder = 'Slime Cyan';
+  bool _hasSpecialCode = false;
   int _level = 1;
   int _exp = 0;
   String _searchQuery = '';
@@ -141,6 +143,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _username = prefs.getString('username') ?? 'Warga Tempest';
       _avatarPath = prefs.getString('avatar_path') ?? '';
       _activeBorder = prefs.getString('active_border') ?? 'Slime Cyan';
+      _hasSpecialCode = prefs.getBool('has_special_code') ?? false;
       _level = prefs.getInt('user_level') ?? 1;
       _exp = prefs.getInt('user_exp') ?? 0;
     });
@@ -153,6 +156,7 @@ class _HomeScreenState extends State<HomeScreen> {
       case 'Veldora Storm':
         return const Color(0xFFFACC15);
       case 'Milim Starlight':
+      case 'Milim Starlight Wing':
         return const Color(0xFFF472B6);
       default:
         return const Color(0xFF38BDF8);
@@ -207,7 +211,10 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Row(
                   children: [
-                    Container(
+                    MilimAvatarFrame(
+                      size: 56,
+                      enabled: _activeBorder == 'Milim Starlight Wing',
+                      child: Container(
                       width: 56,
                       height: 56,
                       padding: const EdgeInsets.all(2.5),
@@ -232,6 +239,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                       ),
                     ),
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
@@ -248,6 +256,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                           const SizedBox(height: 2),
+                          if (_hasSpecialCode) ...[
+                            const SizedBox(height: 4),
+                            const MilimTitleBadge(title: 'MilimNava', fontSize: 12),
+                            const SizedBox(height: 4),
+                          ],
                           Text(
                             'Level $_level • $_activeBorder',
                             style: const TextStyle(

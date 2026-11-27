@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/milim_cosmetics.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PlayScreen extends StatefulWidget {
@@ -61,6 +62,8 @@ class _PlayScreenState extends State<PlayScreen> {
         return const [Color(0xFF0F5C5E), Color(0xFF0A3642)];
       case 'Starlight Rose':
         return const [Color(0xFF6B2D5C), Color(0xFF1E3A5F)];
+      case 'Abyssal Gaze':
+        return [const Color(0xFF140922), const Color(0xFF2D0B38)];
       case 'Storm Gold':
         return const [Color(0xFF6B4E16), Color(0xFF14354C)];
       default:
@@ -74,7 +77,7 @@ class _PlayScreenState extends State<PlayScreen> {
     setState(() {
       _comments.insert(0, {
         'author': _username,
-        'badge': 'WARGA TEMPEST',
+        'badge': _activeCommentBg == 'Abyssal Gaze' ? 'MilimNava' : 'WARGA TEMPEST',
         'text': text,
       });
       _commentController.clear();
@@ -370,6 +373,46 @@ class _PlayScreenState extends State<PlayScreen> {
                 ),
                 const SizedBox(height: 12),
                 ..._comments.map((c) {
+                  if (_activeCommentBg == 'Abyssal Gaze') {
+                    return AbyssalCommentBubble(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          CircleAvatar(
+                            radius: 22,
+                            backgroundColor: const Color(0xFF081C2B),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: Image.asset('assets/images/login_logo.png', fit: BoxFit.contain),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(c['author'] ?? '', style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800, color: Color(0xFFE6F7FF))),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                      decoration: BoxDecoration(color: const Color(0xFFFF2A6D).withValues(alpha: 0.30), borderRadius: BorderRadius.circular(6)),
+                                      child: Text(c['badge'] ?? '', style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: Color(0xFFFF85A1))),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Text(c['text'] ?? '', style: const TextStyle(fontSize: 13.5, height: 1.4, color: Color(0xFFF0FAFF))),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
                   return Container(
                     width: double.infinity,
                     margin: const EdgeInsets.only(bottom: 12),

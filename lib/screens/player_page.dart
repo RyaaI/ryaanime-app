@@ -47,7 +47,11 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
 
   Timer? _watchTimer;
   int _watchedSeconds = 0;
+  int _actualWatchedSeconds = 0;
+  int? _lastVideoPosSec;
   bool _expClaimedForEp = false;
+  bool _autoPlayNext = true;
+  int _prefetchedEp = -1;
   static const int _requiredSeconds = 24 * 60;
 
   final _commentCtrl = TextEditingController();
@@ -126,6 +130,8 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
   void _startWatchTracker() {
     _watchTimer?.cancel();
     _watchedSeconds = 0;
+    _actualWatchedSeconds = 0;
+    _lastVideoPosSec = null;
     _watchTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted || _expClaimedForEp) return;
       final isPlayingNative = _videoCtrl != null &&
@@ -135,19 +141,92 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
 
       if (isPlayingNative || isPlayingWeb) {
         _watchedSeconds++;
-        bool finishedNative = false;
+        bool reachedEndNative = false;
+        int minRequiredSec = _requiredSeconds;
+
         if (isPlayingNative) {
           final dur = _videoCtrl!.value.duration.inSeconds;
           final pos = _videoCtrl!.value.position.inSeconds;
-          if (dur > 60 && pos >= (dur * 0.92).round()) {
-            finishedNative = true;
+          if (dur > 5 && pos >= dur - 1 && _autoPlayNext) {
+            final maxEp = _getTotalEpisodesSafe();
+            if (_currentEp < maxEp) {
+              _switchToEpisode(_currentEp + 1);
+            }
           }
+
+          if (_lastVideoPosSec != null) {
+            final diff = pos - _lastVideoPosSec!;
+            if (diff >= 0 && diff <= 3) {
+              _actualWatchedSeconds += (diff == 0 ? 1 : diff);
+            }
+          } else {
+            _actualWatchedSeconds++;
+          }
+          _lastVideoPosSec = pos;
+
+          if (dur > 60) {
+            final req85 = (dur * 0.85).round();
+            if (req85 < minRequiredSec) {
+              minRequiredSec = req85;
+            }
+            if (pos >= (dur * 0.92).round()) {
+              reachedEndNative = true;
+            }
+          }
+        } else {
+          _actualWatchedSeconds++;
         }
-        if (finishedNative || _watchedSeconds >= _requiredSeconds) {
+
+        final validCompletion = reachedEndNative && (_actualWatchedSeconds >= minRequiredSec);
+        final validMarathon = _actualWatchedSeconds >= _requiredSeconds;
+        if (validCompletion || validMarathon) {
           _grantEpisodeExp();
         }
+      } else {
+        _lastVideoPosSec = null;
       }
     });
+  }
+
+  int _getTotalEpisodesSafe() {
+    final raw = widget.item['episodes'];
+    if (raw is int && raw > 0) return raw;
+    return int.tryParse('$raw') ?? 12;
+  }
+
+    void _prefetchNextEpisode() {
+    final nextEp = _currentEp + 1;
+    final totalEp = _getTotalEpisodesSafe();
+    if (nextEp <= 1 || nextEp > totalEp || _prefetchedEp == nextEp) return;
+    _prefetchedEp = nextEp;
+    final titles = <String>[
+      if (widget.title.trim().isNotEmpty) widget.title.trim(),
+      if ((_animeTitle ?? '').trim().isNotEmpty) _animeTitle!.trim(),
+    ];
+    if (titles.isEmpty) return;
+    StreamService.resolveEpisode(
+      titleCandidates: titles,
+      episode: nextEp,
+      quality: _quality,
+      serverIndex: _serverIndex,
+      preferredProvider: _preferredProvider,
+    ).catchError((_) => null);
+  }
+
+  Future<void> _switchToEpisode(int ep) async {
+    final maxEp = _getTotalEpisodesSafe();
+    if (ep < 1 || ep > maxEp || ep == _currentEp) return;
+    if (!mounted) return;
+    setState(() {
+      _currentEp = ep;
+    _prefetchNextEpisode();
+      _watchedSeconds = 0;
+      _actualWatchedSeconds = 0;
+      _lastVideoPosSec = null;
+      _expClaimedForEp = false;
+    });
+    await _loadProfileAndComments();
+    _initStream();
   }
 
   Future<void> _grantEpisodeExp() async {
@@ -648,7 +727,30 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text('$title • Ep $_currentEp', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13.5)),
+                          Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          icon: const Icon(Icons.skip_previous, color: Colors.white),
+                          onPressed: _currentEp > 1 ? () => _switchToEpisode(_currentEp - 1) : null,
+                        ),
+                        Flexible(child: Text('$title • Ep $_currentEp', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13.5))),
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          icon: const Icon(Icons.skip_next, color: Colors.white),
+                          onPressed: _currentEp < _getTotalEpisodesSafe() ? () => _switchToEpisode(_currentEp + 1) : null,
+                        ),
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          icon: Icon(
+                            _autoPlayNext ? Icons.autoplay : Icons.play_disabled,
+                            color: _autoPlayNext ? const Color(0xFFFF85C0) : Colors.white54,
+                          ),
+                          onPressed: () => setState(() => _autoPlayNext = !_autoPlayNext),
+                        ),
+                      ],
+                    ),
                           Text(_statusMsg, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 11, fontWeight: FontWeight.w600)),
                         ],
                       ),
@@ -935,6 +1037,39 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
     final borderCol = Color(bg['border'] as int);
     final tag = (bg['tag'] ?? '').toString();
 
+    if (bg['anim'] == true) {
+      return AnimatedOwnerCommentCard(
+        c1: c1,
+        c2: c2,
+        borderCol: borderCol,
+        child: Text(
+                          tag,
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: borderCol,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                Text(
+                  (c['rankTitle'] ?? 'Unique Slime').toString(),
+                  style: const TextStyle(fontSize: 10, color: Colors.white60),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  (c['text'] ?? '').toString(),
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+      );
+    }
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
@@ -992,17 +1127,17 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
                 Text(
                   (c['rankTitle'] ?? 'Unique Slime').toString(),
                   style: const TextStyle(fontSize: 10, color: Colors.white60),
-                ),
+                ,
                 const SizedBox(height: 6),
                 Text(
                   (c['text'] ?? '').toString(),
                   style: const TextStyle(color: Colors.white, fontSize: 13),
-                ),
+                ,
               ],
-            ),
-          ),
+            ,
+          ,
         ],
-      ),
-    );
+      ,
+    ;
   }
 }

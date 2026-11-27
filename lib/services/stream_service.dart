@@ -4,10 +4,12 @@ import 'package:http/http.dart' as http;
 class StreamService {
   static const String baseUrl = 'http://191.222.39.242:3001';
   static const String resolverBaseUrl = 'http://191.222.39.226:30001';
+  static final http.Client _httpClient = http.Client();
   static final Map _jsonCache = {};
   static final Map _jsonCacheTime = {};
+  static final Map<String, Map<String, dynamic>> _mp4Cache = {};
 
-  static Future _getJson(Uri uri, {int timeoutSec = 8}) async {
+  static Future _getJson(Uri uri, {int timeoutSec = 4}) async {
     final key = uri.toString();
     final now = DateTime.now().millisecondsSinceEpoch;
     final cached = _jsonCache[key];
@@ -16,7 +18,7 @@ class StreamService {
       return Map.from(cached).cast();
     }
     try {
-      final res = await http.get(uri).timeout(Duration(seconds: timeoutSec));
+      final res = await _httpClient.get(uri).timeout(Duration(seconds: timeoutSec));
       if (res.statusCode >= 200 && res.statusCode < 300) {
         final decoded = jsonDecode(res.body);
         if (decoded is Map) {
@@ -31,20 +33,33 @@ class StreamService {
   }
 
   static Future<String?> _resolveDirectMp4(String rawUrl) async {
+    final cached = _mp4Cache[rawUrl];
+    if (cached != null) {
+      final ts = (cached['ts'] as int?) ?? 0;
+      if (DateTime.now().millisecondsSinceEpoch - ts < 300000) {
+        return cached['url'] as String?;
+      }
+    }
+
     if (rawUrl.isEmpty) return null;
     if (RegExp(r'\.mp4(\?|$)', caseSensitive: false).hasMatch(rawUrl)) {
       return rawUrl;
     }
     final res = await _getJson(
       Uri.parse('$resolverBaseUrl/resolve?url=${Uri.encodeComponent(rawUrl)}'),
-      timeoutSec: 8,
+      timeoutSec: 4,
     );
     final direct = (res?['directUrl'] ?? '').toString().trim();
     if (direct.startsWith('http')) return direct;
+        if (direct.startsWith('http')) {
+      _mp4Cache[rawUrl] = {'url': direct, 'ts': DateTime.now().millisecondsSinceEpoch};
+      return direct;
+    }
+    _mp4Cache[rawUrl] = {'url': null, 'ts': DateTime.now().millisecondsSinceEpoch};
     return null;
   }
 
-  static List<String> _expandQueries(List<String> rawCandidates) {
+static List<String> _expandQueries(List<String> rawCandidates) {
     final out = List<String>.from([]);
     void addUnique(String s) {
       final clean = s.replaceAll(RegExp(r'\s+'), ' ').trim();
@@ -137,7 +152,7 @@ class StreamService {
     required int episode,
     required String quality,
   }) async {
-    for (final q in queries) {
+    for (final q in queries.take(2)) {
       final searchJson = await _getJson(
         Uri.parse('$baseUrl/$provider/search?q=${Uri.encodeComponent(q)}'),
       );
@@ -268,26 +283,30 @@ class StreamService {
               ...srvList.where((s) => s is Map && (s['title'] ?? '').toString().toLowerCase().contains('odstream')),
               ...srvList.where((s) => s is Map && !(s['title'] ?? '').toString().toLowerCase().contains('odstream')),
             ];
-            for (final srv in orderedServers.take(3)) {
-              if (srv is! Map) continue;
+            final tasks = orderedServers.take(3).where((s) => s is Map).map((srv) async {
               final serverId = (srv['serverId'] ?? '').toString().trim();
-              final sTitle = (srv['title'] ?? 'Server').toString().trim();
-              if (serverId.isEmpty) continue;
+              if (serverId.isEmpty) return null;
               final srvJson = await _getJson(
                 Uri.parse('$baseUrl/$provider/server/${Uri.encodeComponent(serverId)}'),
+                timeoutSec: 4,
               );
               final u = (srvJson?['data']?['details']?['url'] ?? '').toString().trim();
-              if (!u.startsWith('http')) continue;
+              if (!u.startsWith('http')) return null;
               final directMp4 = await _resolveDirectMp4(u);
-              if (directMp4 != null && directMp4.isNotEmpty) {
-                final actualRes = (chosenQual?['title'] ?? quality).toString().trim();
-                return {
-                  'url': directMp4,
-                  'label': '$actualRes',
-                  'provider': provider,
-                  'downloadUrl': downloadUrl,
-                };
-              }
+              if (directMp4 == null || directMp4.isEmpty) return null;
+              final actualRes = (chosenQual?['title'] ?? quality).toString().trim();
+              return {
+                'url': directMp4,
+                'label': '$actualRes',
+                'provider': provider,
+                'downloadUrl': downloadUrl,
+              };
+            }).toList();
+            if (tasks.isNotEmpty) {
+              final winners = await Future.wait(tasks);
+              for (final w in winners) {
+                if (w != null) return w;
+            }
             }
           }
         }
@@ -325,20 +344,33 @@ class StreamService {
     final firstPick = preferredProvider == 'otakudesu' ? 'otakudesu' : 'oploverz';
     final secondPick = firstPick == 'oploverz' ? 'otakudesu' : 'oploverz';
 
-    final results = await Future.wait([
-      _fetchFromProvider(
-        provider: firstPick,
-        queries: queries,
-        episode: episode,
-        quality: quality,
-      ),
-      _fetchFromProvider(
-        provider: secondPick,
-        queries: queries,
-        episode: episode,
-        quality: quality,
-      ),
-    ]);
-    return results[0] ?? results[1];
+    bool hasValidStream(Map<String, dynamic>? m) {
+      if (m == null) return false;
+      final u = (m['streamUrl'] ?? m['url'] ?? m['directUrl'] ?? '').toString().trim();
+      return u.startsWith('http');
+    }
+    final f1 = _fetchFromProvider(
+      provider: firstPick,
+      queries: queries,
+      episode: episode,
+      quality: quality,
+    );
+    final f2 = _fetchFromProvider(
+      provider: secondPick,
+      queries: queries,
+      episode: episode,
+      quality: quality,
+    );
+    Map<String, dynamic>? r1;
+    Map<String, dynamic>? r2;
+    try {
+      r1 = await f1.timeout(const Duration(seconds: 4));
+    } catch (_) {}
+    if (hasValidStream(r1)) return r1;
+    try {
+      r2 = await f2.timeout(const Duration(seconds: 4));
+    } catch (_) {}
+    if (hasValidStream(r2)) return r2;
+    return r1 ?? r2;
   }
 }

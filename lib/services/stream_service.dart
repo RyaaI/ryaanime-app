@@ -139,7 +139,7 @@ class StreamService {
           .where((w) => w.length >= 3 && !const {'season', 'part', 'cour', 'the', 'and', 'subtitle', 'indonesia'}.contains(w))
           .toList();
 
-      final rankedCandidates = >[];
+      final List rankedCandidates = [];
       for (final candidate in animeList) {
         if (candidate is! Map) continue;
         final animeId = (candidate['animeId'] ?? '').toString().trim();

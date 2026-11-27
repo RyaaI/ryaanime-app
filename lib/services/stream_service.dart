@@ -132,7 +132,7 @@ class StreamService {
             if (directMp4 != null && directMp4.isNotEmpty) {
               return {
                 'url': directMp4,
-                'label': 'OPLOVERZ • $quality',
+                'label': '$quality',
                 'provider': provider,
                 'downloadUrl': downloadUrl,
               };
@@ -174,7 +174,7 @@ class StreamService {
                 final actualRes = (chosenQual?['title'] ?? quality).toString().trim();
                 return {
                   'url': directMp4,
-                  'label': 'OTAKUDESU • $actualRes ($sTitle)',
+                  'label': '$actualRes',
                   'provider': provider,
                   'downloadUrl': downloadUrl,
                 };

@@ -1,0 +1,100 @@
+[1mdiff --git a/lib/screens/main_nav.dart b/lib/screens/main_nav.dart[m
+[1mindex 3b2dad8..19c38c7 100644[m
+[1m--- a/lib/screens/main_nav.dart[m
+[1m+++ b/lib/screens/main_nav.dart[m
+[36m@@ -316,7 +316,7 @@[m [mclass _HomeTab extends StatefulWidget {[m
+ }[m
+ [m
+ class _HomeTabState extends State<_HomeTab> {[m
+[31m-  late Future<List>> _futureTrending;[m
+[32m+[m[32m  late Future<List<dynamic>> _futureTrending;[m
+ [m
+   @override[m
+   void initState() {[m
+[36m@@ -324,7 +324,7 @@[m [mclass _HomeTabState extends State<_HomeTab> {[m
+     _futureTrending = _load();[m
+   }[m
+ [m
+[31m-  Future<List>> _load() {[m
+[32m+[m[32m  Future<List<dynamic>> _load() {[m
+     const q = r'''[m
+       query {[m
+         Page(page: 1, perPage: 24) {[m
+[36m@@ -345,7 +345,7 @@[m [mclass _HomeTabState extends State<_HomeTab> {[m
+ [m
+   @override[m
+   Widget build(BuildContext context) {[m
+[31m-    return FutureBuilder<List>>([m
+[32m+[m[32m    return FutureBuilder<List<dynamic>>([m
+       future: _futureTrending,[m
+       builder: (context, snap) {[m
+         if (snap.connectionState == ConnectionState.waiting) {[m
+[36m@@ -394,7 +394,7 @@[m [mclass _ScheduleTab extends StatefulWidget {[m
+ [m
+ class _ScheduleTabState extends State<_ScheduleTab> {[m
+   int _selectedDay = DateTime.now().weekday % 7;[m
+[31m-  late Future<List>> _futureWeek;[m
+[32m+[m[32m  late Future<List<dynamic>> _futureWeek;[m
+   static const _days = [[m
+     'Minggu',[m
+     'Senin',[m
+[36m@@ -411,7 +411,7 @@[m [mclass _ScheduleTabState extends State<_ScheduleTab> {[m
+     _futureWeek = _fetchWeek();[m
+   }[m
+ [m
+[31m-  Future<List>> _fetchWeek() async {[m
+[32m+[m[32m  Future<List<dynamic>> _fetchWeek() async {[m
+     final now = DateTime.now().toUtc();[m
+     final start =[m
+         now.subtract(Duration(days: now.weekday % 7)).millisecondsSinceEpoch ~/[m
+[36m@@ -475,7 +475,7 @@[m [mclass _ScheduleTabState extends State<_ScheduleTab> {[m
+           ),[m
+         ),[m
+         Expanded([m
+[31m-          child: FutureBuilder<List>>([m
+[32m+[m[32m          child: FutureBuilder<List<dynamic>>([m
+             future: _futureWeek,[m
+             builder: (context, snap) {[m
+               if (snap.connectionState == ConnectionState.waiting) {[m
+[36m@@ -548,8 +548,8 @@[m [mclass _HistoryTab extends StatefulWidget {[m
+ }[m
+ [m
+ class _HistoryTabState extends State<_HistoryTab> {[m
+[31m-  List> _history = [];[m
+[31m-  List> _favorites = [];[m
+[32m+[m[32m  List<Map<String, dynamic>> _history = [];[m
+[32m+[m[32m  List<Map<String, dynamic>> _favorites = [];[m
+ [m
+   @override[m
+   void initState() {[m
+[36m@@ -559,7 +559,7 @@[m [mclass _HistoryTabState extends State<_HistoryTab> {[m
+ [m
+   Future<void> _loadLists() async {[m
+     final prefs = await SharedPreferences.getInstance();[m
+[31m-    List> parseList(String key) {[m
+[32m+[m[32m    List<Map<String, dynamic>> parseList(String key) {[m
+       try {[m
+         final raw = prefs.getString(key) ?? '[]';[m
+         return (jsonDecode(raw) as List)[m
+[36m@@ -668,7 +668,7 @@[m [mclass _SearchTabState extends State<_SearchTab> {[m
+   final _searchCtrl = TextEditingController();[m
+   String _selectedGenre = '';[m
+   bool _loading = false;[m
+[31m-  List> _results = [];[m
+[32m+[m[32m  List<Map<String, dynamic>> _results = [];[m
+ [m
+   static const List<String> _genres = [[m
+     'Action',[m
+[1mdiff --git a/lib/services/tempest_store.dart b/lib/services/tempest_store.dart[m
+[1mindex f615d18..76b48d7 100644[m
+[1m--- a/lib/services/tempest_store.dart[m
+[1m+++ b/lib/services/tempest_store.dart[m
+[36m@@ -160,7 +160,7 @@[m [mclass RankHelper {[m
+ }[m
+ [m
+ class AniService {[m
+[31m-  static Future<List>> queryMedia([m
+[32m+[m[32m  static Future<List<dynamic>> queryMedia([m
+       String q, Map<String, dynamic> vars) async {[m
+     final res = await http[m
+         .post([m

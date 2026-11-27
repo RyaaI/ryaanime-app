@@ -37,9 +37,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
   bool _showControls = true;
   Timer? _hideControlsTimer;
   String? _seekOverlayText;
-  bool _showControls = true;
-  Timer? _hideControlsTimer;
-  String? _seekOverlayText;
+
   String _statusMsg = 'Memuat server...';
   String _activeStreamUrl = '';
   dynamic _downloadData;
@@ -420,52 +418,8 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
     return '$mins:$secs';
   }
 
-  void _restartHideControlsTimer() {
-    _hideControlsTimer?.cancel();
-    _hideControlsTimer = Timer(const Duration(seconds: 4), () {
-      if (mounted && _videoCtrl != null && _videoCtrl!.value.isPlaying) {
-        setState(() => _showControls = false);
-      }
-    });
-  }
-  void _toggleControlsVisibility() {
-    if (_locked) return;
-    setState(() => _showControls = !_showControls);
-    if (_showControls) _restartHideControlsTimer();
-  }
-  Future<void> _seekRelative(int sec) async {
-    final c = _videoCtrl;
-    if (c == null || !c.value.isInitialized) return;
-    var t = c.value.position + Duration(seconds: sec);
-    if (t < Duration.zero) t = Duration.zero;
-    if (t > c.value.duration) t = c.value.duration;
-    await c.seekTo(t);
-    if (!mounted) return;
-    setState(() => _seekOverlayText = sec > 0 ? '+${sec}d' : '${sec}d');
-    _restartHideControlsTimer();
-    Future.delayed(const Duration(milliseconds: 700), () {
-      if (mounted && _seekOverlayText != null) setState(() => _seekOverlayText = null);
-    });
-  }
-  void _togglePlayPause() {
-    final c = _videoCtrl;
-    if (c == null || !c.value.isInitialized) return;
-    setState(() {
-      if (c.value.isPlaying) {
-        c.pause();
-        _showControls = true;
-        _hideControlsTimer?.cancel();
-      } else {
-        c.play();
-        _restartHideControlsTimer();
-      }
-    });
-  }
-  String _fmtDuration(Duration d) {
-    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final sec = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return d.inHours > 0 ? '${d.inHours}:$m:$sec' : '$m:$sec';
-  }
+
+
   Future<void> _toggleFullscreen() async {
     final wasPlaying = _videoCtrl != null &&
         _videoCtrl!.value.isInitialized &&

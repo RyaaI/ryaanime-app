@@ -145,10 +145,18 @@ class StreamService {
         final animeId = (candidate['animeId'] ?? '').toString().trim();
         if (animeId.isEmpty || animeId.toLowerCase() == 'none') continue;
         final candTitle = (candidate['title'] ?? '').toString().trim();
-        final hay = '$candTitle $animeId'.toLowerCase();
+        final hay = '$candTitle $animeId'
+            .toLowerCase()
+            .replaceAll(RegExp(r'\b1(?=[a-z])'), 'one ')
+            .replaceAll('1', ' one ');
+        final hayWords = hay
+            .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+            .split(RegExp(r'\s+'))
+            .where((w) => w.isNotEmpty)
+            .toSet();
         int score = 0;
         if (keyTokens.isNotEmpty) {
-          score = keyTokens.where((t) => hay.contains(t)).length;
+          score = keyTokens.where((t) => hayWords.contains(t)).length;
           if (score == 0) continue;
         }
         if (reqSeason != null && reqSeason.isNotEmpty) {
@@ -173,9 +181,17 @@ class StreamService {
         );
         final animeDetails = animeJson?['data']?['details'];
         final detailTitle = (animeDetails is Map ? (animeDetails['title'] ?? '') : '').toString().trim();
-        final fullHay = '$hay $detailTitle'.toLowerCase();
+        final fullHay = '$hay $detailTitle'
+            .toLowerCase()
+            .replaceAll(RegExp(r'\b1(?=[a-z])'), 'one ')
+            .replaceAll('1', ' one ');
+        final fullWords = fullHay
+            .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+            .split(RegExp(r'\s+'))
+            .where((w) => w.isNotEmpty)
+            .toSet();
         if (requiredHits > 0) {
-          final matchedDetailTokens = keyTokens.where((t) => fullHay.contains(t)).length;
+          final matchedDetailTokens = keyTokens.where((t) => fullWords.contains(t)).length;
           if (matchedDetailTokens < requiredHits) continue;
         }
         final epList = animeDetails is Map ? animeDetails['episodeList'] : null;

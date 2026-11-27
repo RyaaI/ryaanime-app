@@ -170,7 +170,7 @@ class StreamService {
         });
       }
       rankedCandidates.sort((a, b) => (b['score'] as int).compareTo(a['score'] as int));
-      final requiredHits = keyTokens.length >= 2 ? 2 : (keyTokens.isEmpty ? 0 : 1);
+      final requiredHits = keyTokens.length;
 
       for (final cand in rankedCandidates.take(2)) {
         final animeId = cand['animeId'] as String;
@@ -215,7 +215,7 @@ class StreamService {
           Uri.parse('$baseUrl/$provider/episode/${Uri.encodeComponent(episodeId)}'),
         );
         final details = epJson?['data']?['details'];
-        if (details is! Map) continue;
+        if (details is! Map) return null;
 
         final downloadUrl = details['downloadUrl'];
         final qList = details['server']?['qualityList'];

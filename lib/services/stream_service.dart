@@ -47,30 +47,68 @@ class StreamService {
     return out;
   }
 
-  static String? _pickOploverzFiledonUrl(dynamic downloadUrlObj, String quality) {
-    if (downloadUrlObj is! Map) return null;
-    final qualities = downloadUrlObj['qualities'];
-    if (qualities is! List || qualities.isEmpty) return null;
+  static String? _pickOploverzFiledonUrl(dynamic downloadSource, String quality) {
+    final qClean = quality.toLowerCase().replaceAll('p', '').trim();
+    String? pickFromUrlList(dynamic rawList) {
+      if (rawList is! List) return null;
+      for (final u in rawList) {
+        if (u is! Map) continue;
+        final href = (u['url'] ?? '').toString().trim();
+        final title = (u['title'] ?? '').toString().toLowerCase();
+        if (href.startsWith('http') &&
+            (href.toLowerCase().contains('filedon.co') || title.contains('filedon'))) {
+          return href;
+        }
+      }
+      return null;
+    }
 
-    final qClean = quality.replaceAll('p', '').trim();
-    Map? chosenQual;
-    for (final item in qualities) {
-      if (item is Map && (item['title'] ?? '').toString().contains(qClean)) {
-        chosenQual = item;
-        break;
+    if (downloadSource is List) {
+      final sortedFormats = List<dynamic>.from(downloadSource)
+        ..sort((a, b) {
+          final ta = (a is Map ? (a['title'] ?? '') : '').toString().toLowerCase();
+          final tb = (b is Map ? (b['title'] ?? '') : '').toString().toLowerCase();
+          final sa = ta == 'mp4' ? 0 : (ta == 'mkv' ? 1 : 2);
+          final sb = tb == 'mp4' ? 0 : (tb == 'mkv' ? 1 : 2);
+          return sa.compareTo(sb);
+        });
+
+      for (final fmt in sortedFormats) {
+        if (fmt is! Map) continue;
+        final qList = fmt['qualityList'];
+        if (qList is! List || qList.isEmpty) continue;
+        Map? matched;
+        for (final q in qList) {
+          if (q is! Map) continue;
+          final qt = (q['title'] ?? '').toString().toLowerCase();
+          if (qClean.isNotEmpty && qt.contains(qClean)) {
+            matched = q;
+            break;
+          }
+        }
+        matched ??= qList.last is Map ? qList.last as Map : null;
+        final found = pickFromUrlList(matched?['urlList']);
+        if (found != null) return found;
       }
     }
-    chosenQual ??= qualities.last is Map ? qualities.last as Map : null;
-    final urlList = chosenQual?['urls'];
-    if (urlList is! List || urlList.isEmpty) return null;
 
-    for (final u in urlList) {
-      if (u is! Map) continue;
-      final href = (u['url'] ?? '').toString().trim();
-      if (href.startsWith('http') && href.contains('filedon.co')) {
-        return href;
+    if (downloadSource is Map) {
+      final qualities = downloadSource['qualities'];
+      if (qualities is List && qualities.isNotEmpty) {
+        Map? chosenQual;
+        for (final q in qualities) {
+          if (q is! Map) continue;
+          final title = (q['title'] ?? '').toString().toLowerCase();
+          if (qClean.isNotEmpty && title.contains(qClean)) {
+            chosenQual = q;
+            break;
+          }
+        }
+        chosenQual ??= qualities.last is Map ? qualities.last as Map : null;
+        return pickFromUrlList(chosenQual?['urls']);
       }
     }
+
     return null;
   }
 
@@ -126,7 +164,7 @@ class StreamService {
         final qList = details['server']?['qualityList'];
 
         if (provider == 'oploverz') {
-          final pickedFiledon = _pickOploverzFiledonUrl(downloadUrl, quality);
+          final pickedFiledon = _pickOploverzFiledonUrl(details['download'] ?? downloadUrl, quality);
           if (pickedFiledon != null) {
             final directMp4 = await _resolveDirectMp4(pickedFiledon);
             if (directMp4 != null && directMp4.isNotEmpty) {

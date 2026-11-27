@@ -4,13 +4,27 @@ import 'package:http/http.dart' as http;
 class StreamService {
   static const String baseUrl = 'http://191.222.39.242:3001';
   static const String resolverBaseUrl = 'http://191.222.39.226:30001';
+  static final Map _jsonCache = {};
+  static final Map _jsonCacheTime = {};
 
-  static Future<Map<String, dynamic>?> _getJson(Uri uri, {int timeoutSec = 15}) async {
+  static Future _getJson(Uri uri, {int timeoutSec = 8}) async {
+    final key = uri.toString();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final cached = _jsonCache[key];
+    final ts = _jsonCacheTime[key];
+    if (cached is Map && ts is int && (now - ts) < 600000) {
+      return Map.from(cached).cast();
+    }
     try {
       final res = await http.get(uri).timeout(Duration(seconds: timeoutSec));
       if (res.statusCode >= 200 && res.statusCode < 300) {
         final decoded = jsonDecode(res.body);
-        if (decoded is Map<String, dynamic>) return decoded;
+        if (decoded is Map) {
+          final typed = Map.from(decoded).cast();
+          _jsonCache[key] = typed;
+          _jsonCacheTime[key] = now;
+          return typed;
+        }
       }
     } catch (_) {}
     return null;
@@ -311,19 +325,20 @@ class StreamService {
     final firstPick = preferredProvider == 'otakudesu' ? 'otakudesu' : 'oploverz';
     final secondPick = firstPick == 'oploverz' ? 'otakudesu' : 'oploverz';
 
-    final primary = await _fetchFromProvider(
-      provider: firstPick,
-      queries: queries,
-      episode: episode,
-      quality: quality,
-    );
-    if (primary != null) return primary;
-
-    return await _fetchFromProvider(
-      provider: secondPick,
-      queries: queries,
-      episode: episode,
-      quality: quality,
-    );
+    final results = await Future.wait([
+      _fetchFromProvider(
+        provider: firstPick,
+        queries: queries,
+        episode: episode,
+        quality: quality,
+      ),
+      _fetchFromProvider(
+        provider: secondPick,
+        queries: queries,
+        episode: episode,
+        quality: quality,
+      ),
+    ]);
+    return results[0] ?? results[1];
   }
 }

@@ -149,15 +149,27 @@ class StreamService {
           final hasSeason = RegExp(r'(?:season[-_\s]*' + reqSeason + r'\b|\bs' + reqSeason + r'(?:\b|-|_))', caseSensitive: false).hasMatch(hay);
           if (!hasSeason) continue;
         }
+        final minRequiredTokens = keyTokens.length >= 2 ? 2 : 1;
         if (keyTokens.isNotEmpty) {
           final matchedTokens = keyTokens.where((t) => hay.contains(t)).length;
-          if (matchedTokens == 0) continue;
+          if (matchedTokens < minRequiredTokens) continue;
         }
 
         final animeJson = await _getJson(
           Uri.parse('$baseUrl/$provider/anime/${Uri.encodeComponent(animeId)}'),
         );
-        final epList = animeJson?['data']?['details']?['episodeList'];
+        final animeDetails = animeJson?['data']?['details'];
+        final detailTitle = (animeDetails is Map ? (animeDetails['title'] ?? '') : '').toString().trim();
+        final fullHay = '$hay $detailTitle'.toLowerCase();
+        if (reqSeason != null && reqSeason.isNotEmpty) {
+          final hasSeasonDetail = RegExp(r'(?:season[-_\s]*' + reqSeason + r'\b|\bs' + reqSeason + r'(?:\b|-|_))', caseSensitive: false).hasMatch(fullHay);
+          if (!hasSeasonDetail) continue;
+        }
+        if (keyTokens.isNotEmpty) {
+          final matchedDetailTokens = keyTokens.where((t) => fullHay.contains(t)).length;
+          if (matchedDetailTokens < minRequiredTokens) continue;
+        }
+        final epList = animeDetails is Map ? animeDetails['episodeList'] : null;
         if (epList is! List || epList.isEmpty) continue;
 
         String episodeId = '';

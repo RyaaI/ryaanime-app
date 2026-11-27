@@ -25,7 +25,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _level = 1;
   int _exp = 0;
   String _searchQuery = '';
-  List<Map<String, dynamic>> _routerSearchResults = const [];
+  List<Map<String, String>> _routerSearchResults = const [];
   bool _isSearchingRouter = false;
   Timer? _searchDebounce;
   int _searchToken = 0;
@@ -97,7 +97,7 @@ class _HomeScreenState extends State<HomeScreen> {
       try {
         final raw = await StreamService.searchBothRouters(trimmed);
         if (!mounted || currentToken != _searchToken) return;
-        final mapped = raw.map>((m) {
+        final mapped = raw.map<Map<String, String>>((m) {
           final src = (m['source'] ?? 'router').toString().trim();
           final srcLabel = src.isEmpty ? 'Router' : src[0].toUpperCase() + src.substring(1);
           return {

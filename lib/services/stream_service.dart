@@ -23,7 +23,7 @@ class StreamService {
     }
     final res = await _getJson(
       Uri.parse('$resolverBaseUrl/resolve?url=${Uri.encodeComponent(rawUrl)}'),
-      timeoutSec: 12,
+      timeoutSec: 8,
     );
     final direct = (res?['directUrl'] ?? '').toString().trim();
     if (direct.startsWith('http')) return direct;
@@ -33,16 +33,21 @@ class StreamService {
   static List<String> _expandQueries(List<String> rawCandidates) {
     final out = List<String>.from([]);
     void addUnique(String s) {
-      final clean = s.trim();
+      final clean = s.replaceAll(RegExp(r'\s+'), ' ').trim();
       if (clean.length >= 3 && !out.contains(clean)) out.add(clean);
     }
     for (final raw in rawCandidates) {
       addUnique(raw);
-      final noSeason = raw.replaceAll(RegExp(r'\b(Season|Part|Cour)\s*\d+.*\$', caseSensitive: false), '').trim();
+      final cleanedDash = raw.split(' - ').first.trim();
+      addUnique(cleanedDash);
+      final noSeason = cleanedDash
+          .replaceAll(RegExp(r'\b(Season|Part|Cour)\s*\d+.*$', caseSensitive: false), '')
+          .replaceAll(RegExp(r'[:\-]\s*$'), '')
+          .trim();
       addUnique(noSeason);
-      final words = noSeason.split(RegExp(r'\s+'));
+      final words = noSeason.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+      if (words.length >= 4) addUnique(words.take(4).join(' '));
       if (words.length >= 3) addUnique(words.take(3).join(' '));
-      if (words.length >= 2) addUnique(words.take(2).join(' '));
     }
     return out;
   }
@@ -125,10 +130,29 @@ class StreamService {
       final animeList = searchJson?['data']?['animeList'];
       if (animeList is! List || animeList.isEmpty) continue;
 
-      for (final candidate in animeList.take(3)) {
+      final qLower = q.toLowerCase();
+      final seasonMatch = RegExp(r'\b(?:season|s)\s*(\d+)\b', caseSensitive: false).firstMatch(qLower);
+      final reqSeason = seasonMatch?.group(1);
+      final keyTokens = qLower
+          .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+          .split(RegExp(r'\s+'))
+          .where((w) => w.length >= 3 && !const {'season', 'part', 'cour', 'the', 'and', 'subtitle', 'indonesia'}.contains(w))
+          .toList();
+
+      for (final candidate in animeList.take(5)) {
         if (candidate is! Map) continue;
         final animeId = (candidate['animeId'] ?? '').toString().trim();
+        final candTitle = (candidate['title'] ?? '').toString().trim();
         if (animeId.isEmpty) continue;
+        final hay = '$candTitle $animeId'.toLowerCase();
+        if (reqSeason != null && reqSeason.isNotEmpty) {
+          final hasSeason = RegExp(r'(?:season[-_\s]*' + reqSeason + r'\b|\bs' + reqSeason + r'(?:\b|-|_))', caseSensitive: false).hasMatch(hay);
+          if (!hasSeason) continue;
+        }
+        if (keyTokens.isNotEmpty) {
+          final matchedTokens = keyTokens.where((t) => hay.contains(t)).length;
+          if (matchedTokens == 0) continue;
+        }
 
         final animeJson = await _getJson(
           Uri.parse('$baseUrl/$provider/anime/${Uri.encodeComponent(animeId)}'),
@@ -147,10 +171,6 @@ class StreamService {
             episodeId = eid;
             break;
           }
-        }
-        if (episodeId.isEmpty) {
-          final revIdx = (epList.length - episode).clamp(0, epList.length - 1);
-          episodeId = (epList[revIdx]['episodeId'] ?? '').toString().trim();
         }
         if (episodeId.isEmpty) continue;
 
